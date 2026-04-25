@@ -46,6 +46,12 @@ def load_latest_production():
         WHERE date = (SELECT MAX(date) FROM oil_production)
     """, conn)
     conn.close()
+    
+    # Safety net — only valid platforms and well names with '#'
+    VALID_PLATFORMS = ['R-7A', 'R-9A', 'R-10A', 'R-12A', 'R-12B', 'R-13A']
+    df = df[df['platform'].isin(VALID_PLATFORMS)]
+    df = df[df['well_name'].str.contains('#', na=False)]
+    
     return df
 
 def load_production_trend(days=30):
