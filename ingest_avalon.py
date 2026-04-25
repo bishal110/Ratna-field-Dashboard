@@ -16,35 +16,22 @@ def clean_well_name(raw_name):
     """
     Extract well name from Avalon parameter string.
 
-    Avalon format: ONGC.NH.Ratna Field.R7A.R7A1.Motor Temperature 1
-    Structure:     [company].[region].[field].[platform].[well].[parameter]
+    Real Avalon format: ONGC.NH.Ratna Field.R7A.R7A1.Motor Temperature 1
+    Structure: [company].[region].[field].[platform].[well].[parameter]
+    Well name is always the 5th element (index 4) when split by '.'
 
-    We split by '.' and take index 4 (5th element) = well name
-
-    Examples:
-    ONGC.NH.Ratna Field.R7A.R7A1.Motor Temperature 1   → R7A1
-    ONGC.NH.Ratna Field.R10A.R10A2.VFD Output Frequency → R10A2
-    ONGC.NH.Ratna Field.R12A.R12A02Z.Pump Intake Pressure → R12A02Z
-
-    For privacy-masked files (like sample file with 'well2' naming):
-    Falls back to extracting after 'well' keyword
+    Sample/masked format fallback: BGOIL well2Motor Temperature 1
+    Extracts just the well identifier without parameter suffix
     """
     try:
         parts = str(raw_name).strip().split('.')
-
-        # Real Avalon format — 6+ parts separated by dots
         if len(parts) >= 6:
-            return parts[4].strip()  # Index 4 = well name
+            return parts[4].strip()
 
         # Fallback for sample/masked files
-        # Handles format like 'BGOIL well2Motor Temperature 1'
         match = re.search(r'\bwell(\w+)', raw_name, re.IGNORECASE)
         if match:
-            # Extract just the well identifier, not the parameter part
-            # 'well2Motor' → we want 'well2', not 'well2Motor'
-            # Split on capital letters to find where well ID ends
-            raw_id = match.group(0)  # e.g. 'well2Motor'
-            # Take only up to first capital after the number
+            raw_id = match.group(0)
             id_match = re.match(r'(well\d+)', raw_id, re.IGNORECASE)
             if id_match:
                 return id_match.group(1)
@@ -59,27 +46,20 @@ def parse_parameter_name(raw_name):
     """
     Extract parameter type from Avalon parameter string.
 
-    Real Avalon format: ONGC.NH.Ratna Field.R7A.R7A1.Motor Temperature 1
-    Parameter is everything after the 5th dot (6th part onwards)
-
-    Sample/masked format: BGOIL well2Motor Temperature 1
-    Parameter extracted by removing asset and well prefix
+    Real format: ONGC.NH.Ratna Field.R7A.R7A1.Motor Temperature 1
+    Parameter = everything after 5th dot (6th part onwards)
 
     Maps parameter string to database column name.
+    Add new parameters to param_map if Avalon adds more in future.
     """
     try:
         parts = str(raw_name).strip().split('.')
-
-        # Real Avalon format — parameter is 6th part onwards
         if len(parts) >= 6:
             param_str = '.'.join(parts[5:]).strip()
         else:
             # Fallback for sample files
-            # Remove asset prefix (BGOIL, RATNA etc) and well identifier
-            # 'BGOIL well2Motor Temperature 1' → 'Motor Temperature 1'
             param_str = re.sub(
-                r'^[\w\s]+well\w+\s*',  # Remove everything up to and including well ID
-                '',
+                r'^[\w\s]+well\w+\s*', '',
                 str(raw_name).strip(),
                 flags=re.IGNORECASE
             ).strip()
@@ -90,8 +70,9 @@ def parse_parameter_name(raw_name):
         param_str = str(raw_name).strip()
 
     # ── PARAMETER MAP ─────────────────────────────────────────────────────────
-    # Maps Avalon parameter names to database column names
-    # Add new parameters here if Avalon adds more in future
+    # Maps Avalon parameter names → database column names
+    # Key = substring to match (case insensitive)
+    # Value = database column name
     param_map = {
         "Motor Temperature 1":      "motor_temp_1_c",
         "Motor Temperature":        "motor_temp_1_c",
@@ -107,6 +88,7 @@ def parse_parameter_name(raw_name):
         "Pump Intake Temperature":  "pump_intake_temp_c",
         "Vibration X":              "vibration_x",
         "Vibration Y":              "vibration_y",
+        "Vibration Z":              "vibration_z",
     }
 
     for key, col in param_map.items():
@@ -117,20 +99,16 @@ def parse_parameter_name(raw_name):
 
 def ingest_avalon():
     """
-    Main function — reads Avalon ESP export and loads into database.
+    Main ingestion function for Avalon ESP export files.
 
-    Avalon exports data in LONG format:
-    Each row = one parameter, one timestamp, one value
-    
-    We need to PIVOT this to WIDE format:
-    Each row = one well, one timestamp, ALL parameters as columns
-
-    Steps:
-    1. Read file (CSV or Excel)
-    2. Extract well name and parameter from parameter column
-    3. Pivot long → wide
-    4. Flag dead sensors (zero values on pressure/temp)
-    5. Insert into database
+    Process:
+    1. Read CSV or Excel file
+    2. Standardize column names
+    3. Extract well name and parameter from parameter column
+    4. Pivot long format → wide format (one row per well per timestamp)
+    5. Forward fill missing values within each well
+    6. Flag dead sensors (zero values on pressure/temp)
+    7. Insert into database
     """
     filepath = find_avalon_file()
     if not filepath:
@@ -153,53 +131,90 @@ def ingest_avalon():
     print(f"   Columns found: {list(df.columns)}")
 
     # ── STANDARDIZE COLUMN NAMES ──────────────────────────────────────────────
-    # Avalon exports may have slightly different column names
-    # We standardize to: parameter, timestamp, value, quality, quality_text, uom
+    # Avalon may use slightly different column names across exports
+    # We standardize to consistent internal names
     df.columns = ['parameter', 'timestamp', 'value',
                   'quality', 'quality_text', 'uom'] + list(df.columns[6:])
 
-    # Remove header rows that got included in data
+    # Remove header rows that may have been included in data
     df = df[df['parameter'] != 'parameters'].copy()
     df = df[df['timestamp'] != 'Time (Asia/Calcutta)'].copy()
 
     # ── PARSE TIMESTAMP ───────────────────────────────────────────────────────
+    # Avalon timestamps include timezone info — convert to UTC then remove tz
+    # so SQLite can store as plain text
     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
-    df['timestamp'] = df['timestamp'].dt.tz_localize(None)  # Remove timezone
+    df['timestamp'] = df['timestamp'].dt.tz_localize(None)
     df = df.dropna(subset=['timestamp'])
 
     # ── PARSE VALUE ───────────────────────────────────────────────────────────
     df['value'] = pd.to_numeric(df['value'], errors='coerce')
 
     # ── EXTRACT WELL NAME AND PARAMETER ──────────────────────────────────────
-    df['well_name']  = df['parameter'].apply(clean_well_name)
-    df['param_col']  = df['parameter'].apply(parse_parameter_name)
+    df['well_name'] = df['parameter'].apply(clean_well_name)
+    df['param_col'] = df['parameter'].apply(parse_parameter_name)
 
-    # Show what was detected
     print(f"\n   Wells detected: {df['well_name'].unique()}")
     print(f"   Parameters detected: {df['param_col'].dropna().unique()}")
 
-    # Drop rows where parameter not recognized
+    # Show unrecognized parameters
     unrecognized = df[df['param_col'].isna()]['parameter'].unique()
     if len(unrecognized) > 0:
         print(f"\n   ⚠️  Unrecognized parameters (skipped): {unrecognized}")
+
+    # Drop unrecognized parameters
     df = df.dropna(subset=['param_col'])
 
     # ── PIVOT LONG → WIDE ─────────────────────────────────────────────────────
-    # Convert from:
-    #   well | timestamp | motor_temp | value
-    #   R7A1 | 2026-04-05| ...        | 118.7
-    # To:
-    #   well | timestamp | motor_temp | vfd_freq | intake_pressure | ...
-    #   R7A1 | 2026-04-05| 118.7      | 44       | 983.5           | ...
+    # Convert from one row per parameter per timestamp
+    # to one row per well per timestamp with all parameters as columns
+    #
+    # Before pivot:
+    #   well | timestamp | param_col      | value
+    #   R7A1 | 05:30     | motor_temp_1_c | 107.8
+    #   R7A1 | 05:30     | motor_load_pct | 57.1
+    #
+    # After pivot:
+    #   well | timestamp | motor_temp_1_c | motor_load_pct | ...
+    #   R7A1 | 05:30     | 107.8          | 57.1           | ...
     pivot_df = df.pivot_table(
         index=['timestamp', 'well_name'],
         columns='param_col',
         values='value',
-        aggfunc='first'  # If duplicate, take first value
+        aggfunc='first'
     ).reset_index()
 
-    # Clean up column naming after pivot
     pivot_df.columns.name = None
+
+    # ── FORWARD FILL MISSING VALUES ───────────────────────────────────────────
+    # Problem: Avalon records different parameters at different timestamps
+    # This creates alternating None values after pivot:
+    #   R7A1 | 05:30 | motor_temp=107.8 | vfd=None    | load=None
+    #   R7A1 | 17:30 | motor_temp=None  | vfd=45.0    | load=57.1
+    #
+    # Solution: Forward fill within each well
+    # Carries last known value forward to fill gaps
+    # This is standard practice for sensor data at different frequencies
+    param_cols = [
+        'motor_temp_1_c', 'vfd_output_frequency_hz',
+        'pump_discharge_pressure_psi', 'pump_intake_pressure_psi',
+        'motor_load_pct', 'motor_current_avg_amp',
+        'motor_current_a_amp', 'motor_current_b_amp', 'motor_current_c_amp',
+        'pump_intake_temp_c', 'vibration_x', 'vibration_y', 'vibration_z'
+    ]
+
+    # Sort by well and timestamp before filling
+    pivot_df = pivot_df.sort_values(['well_name', 'timestamp'])
+
+    for col in param_cols:
+        if col in pivot_df.columns:
+            # ffill = forward fill: carry last valid value forward
+            pivot_df[col] = pivot_df.groupby('well_name')[col].ffill()
+
+    print(f"\n   After forward fill — sample check:")
+    print(f"   Rows with motor_temp: {pivot_df['motor_temp_1_c'].notna().sum()}")
+    if 'vfd_output_frequency_hz' in pivot_df.columns:
+        print(f"   Rows with VFD freq:   {pivot_df['vfd_output_frequency_hz'].notna().sum()}")
 
     # ── ADD QUALITY FLAG ──────────────────────────────────────────────────────
     quality_df = df.groupby(
@@ -209,8 +224,8 @@ def ingest_avalon():
     pivot_df.rename(columns={'quality_text': 'quality_flag'}, inplace=True)
 
     # ── DEAD SENSOR DETECTION ─────────────────────────────────────────────────
-    # Zero values on pressure/temperature sensors are suspicious
-    # A pump running cannot have 0 psi discharge pressure — sensor is dead
+    # Zero values on pressure/temperature are suspicious
+    # A running pump cannot have 0 psi discharge pressure
     suspect_cols = [
         'pump_discharge_pressure_psi',
         'pump_intake_pressure_psi',
@@ -227,7 +242,7 @@ def ingest_avalon():
             else:
                 print(f"   ✅ {col}: No zero readings detected")
 
-    # ── CONVERT TIMESTAMP TO STRING FOR SQLITE ────────────────────────────────
+    # ── CONVERT TIMESTAMP FOR SQLITE ──────────────────────────────────────────
     pivot_df['timestamp'] = pivot_df['timestamp'].astype(str)
 
     # ── INSERT INTO DATABASE ──────────────────────────────────────────────────
