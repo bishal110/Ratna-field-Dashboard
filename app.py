@@ -17,17 +17,150 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ── THEME DETECTION & BACKGROUND ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    .metric-card {
-        background-color: #1e1e1e;
-        border-radius: 10px;
-        padding: 15px;
-        border-left: 4px solid #00b4d8;
+    /* Import clean industrial font */
+    @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap');
+
+    /* ── BACKGROUND ── */
+    .stApp {
+        background-image: 
+            linear-gradient(
+                rgba(0, 0, 0, 0.65),
+                rgba(0, 10, 30, 0.75)
+            ),
+            url('https://images.unsplash.com/photo-1518709766631-a6a7f45921c3?w=1920&q=60');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
     }
-    .alert-red    { border-left: 4px solid #e63946; }
-    .alert-yellow { border-left: 4px solid #f4a261; }
-    .alert-green  { border-left: 4px solid #2a9d8f; }
+
+    /* ── SIDEBAR ── */
+    [data-testid="stSidebar"] {
+        background: rgba(0, 10, 30, 0.85) !important;
+        backdrop-filter: blur(12px);
+        border-right: 1px solid rgba(0, 180, 216, 0.2);
+    }
+
+    /* ── METRIC CARDS — Glassmorphism ── */
+    [data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(0, 180, 216, 0.25) !important;
+        border-radius: 12px !important;
+        padding: 16px !important;
+        backdrop-filter: blur(10px) !important;
+        transition: all 0.3s ease !important;
+    }
+
+    [data-testid="stMetric"]:hover {
+        background: rgba(0, 180, 216, 0.1) !important;
+        border-color: rgba(0, 180, 216, 0.5) !important;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 32px rgba(0, 180, 216, 0.15);
+    }
+
+    [data-testid="stMetricLabel"] {
+        color: #90e0ef !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 12px !important;
+        letter-spacing: 0.5px !important;
+    }
+
+    [data-testid="stMetricValue"] {
+        color: #ffffff !important;
+        font-family: 'Rajdhani', sans-serif !important;
+        font-size: 2rem !important;
+        font-weight: 600 !important;
+    }
+
+    /* ── DATAFRAME ── */
+    [data-testid="stDataFrame"] {
+        background: rgba(255, 255, 255, 0.03) !important;
+        border: 1px solid rgba(0, 180, 216, 0.15) !important;
+        border-radius: 12px !important;
+        backdrop-filter: blur(10px) !important;
+    }
+
+    /* ── HEADINGS ── */
+    h1, h2, h3 {
+        font-family: 'Rajdhani', sans-serif !important;
+        letter-spacing: 1px !important;
+    }
+
+    h1 { color: #ffffff !important; font-weight: 700 !important; }
+    h2 { color: #90e0ef !important; font-weight: 600 !important; }
+    h3 { color: #caf0f8 !important; font-weight: 500 !important; }
+
+    /* ── SELECTBOX ── */
+    [data-testid="stSelectbox"] > div {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(0, 180, 216, 0.25) !important;
+        border-radius: 8px !important;
+        backdrop-filter: blur(10px) !important;
+    }
+
+    /* ── DIVIDER ── */
+    hr {
+        border-color: rgba(0, 180, 216, 0.2) !important;
+    }
+
+    /* ── SMOOTH PAGE TRANSITIONS ── */
+    .main .block-container {
+        animation: fadeIn 0.4s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── LIGHT MODE OVERRIDE ── */
+    @media (prefers-color-scheme: light) {
+        .stApp {
+            background-image: 
+                linear-gradient(
+                    rgba(255, 255, 255, 0.7),
+                    rgba(220, 240, 255, 0.75)
+                ),
+                url('https://images.unsplash.com/photo-1518709766631-a6a7f45921c3?w=1920&q=60');
+        }
+
+        [data-testid="stSidebar"] {
+            background: rgba(220, 240, 255, 0.85) !important;
+            border-right: 1px solid rgba(0, 100, 180, 0.2);
+        }
+
+        [data-testid="stMetric"] {
+            background: rgba(255, 255, 255, 0.6) !important;
+            border: 1px solid rgba(0, 100, 180, 0.2) !important;
+        }
+
+        [data-testid="stMetricLabel"] {
+            color: #0077b6 !important;
+        }
+
+        [data-testid="stMetricValue"] {
+            color: #03045e !important;
+        }
+
+        h1 { color: #03045e !important; }
+        h2 { color: #0077b6 !important; }
+        h3 { color: #0096c7 !important; }
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(0, 180, 216, 0.4);
+        border-radius: 4px;
+    }
+
+    /* ── CAPTION TEXT ── */
+    .stCaption {
+        color: rgba(144, 224, 239, 0.7) !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
