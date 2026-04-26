@@ -197,7 +197,7 @@ st.sidebar.caption(f"Last updated: {datetime.now().strftime('%d-%m-%Y %H:%M')}")
 # PAGE 1 — FIELD OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 if page == "🏠 Field Overview":
-    st.title("🛢️ Ratna Field — Production Overview")
+    st.title("🛢️ Oil Field — Production Overview")
 
     prod_df     = load_latest_production()
     pressure_df = load_latest_pressure()
