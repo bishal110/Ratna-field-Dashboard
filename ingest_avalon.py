@@ -222,9 +222,32 @@ def detect_frozen_sensors(pivot_df, freeze_threshold_hours=12):
                 else:
                     consecutive_same = 0
 
-            # Convert readings to approximate hours
-            # Avalon records every 12 hours = 2 readings per day
-            approx_hours = max_consecutive * 12
+            # Calculate actual time span of consecutive same values
+            # Find where values change
+            same_mask = values == values.shift(1)
+            if same_mask.sum() == 0:
+                continue
+
+            # Get timestamps of the frozen period
+            timestamps = well_data['timestamp'].reset_index(drop=True)
+            if len(timestamps) == len(same_mask):
+                # Find longest consecutive frozen block
+                frozen_start = None
+                max_duration = pd.Timedelta(0)
+
+                for i, is_frozen in enumerate(same_mask):
+                    if is_frozen and frozen_start is None:
+                        frozen_start = timestamps.iloc[i-1] if i > 0 else timestamps.iloc[i]
+                    elif not is_frozen and frozen_start is not None:
+                        duration = timestamps.iloc[i] - frozen_start
+                        max_duration = max(max_duration, duration)
+                        frozen_start = None
+
+                if frozen_start is not None:
+                    duration = timestamps.iloc[-1] - frozen_start
+                    max_duration = max(max_duration, duration)
+
+                approx_hours = max_duration.total_seconds() / 3600
 
             if approx_hours >= freeze_threshold_hours:
                 frozen_sensors[col][well] = approx_hours
