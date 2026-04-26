@@ -191,6 +191,18 @@ page = st.sidebar.radio("Navigation", [
     "⚠️ Early Warning"
 ])
 
+# DEBUG — remove after fixing
+with st.sidebar.expander("🔍 Debug Info"):
+    conn = get_connection()
+    debug_df = pd.read_sql(
+        "SELECT date, COUNT(*) as wells FROM oil_production GROUP BY date ORDER BY date",
+        conn)
+    conn.close()
+    st.write(f"Total dates in DB: {len(debug_df)}")
+    st.write(debug_df)
+
+st.sidebar.divider()
+st.sidebar.caption(f"Last updated: {datetime.now().strftime('%d-%m-%Y %H:%M')}")
 st.sidebar.divider()
 st.sidebar.caption(f"Last updated: {datetime.now().strftime('%d-%m-%Y %H:%M')}")
 
