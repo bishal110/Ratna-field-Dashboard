@@ -51,17 +51,56 @@ def ingest_pressure():
 
     df['date'] = df['date'].replace('', np.nan)
 
-    # Clean date values — remove any non-date characters like backticks
-    # Some rows have data entry errors like `22/8/2020
-    df['date'] = df['date'].astype(str).str.replace(
-        r'[`\'\"]+', '', regex=True).str.strip()
-    df['date'] = df['date'].replace('nan', np.nan)
+    def parse_date_smart(val):
+        """
+        Smart date parser that handles mixed formats:
+        - datetime objects from Excel (already correct)
+        - YYYY-MM-DD strings
+        - D/M/YYYY or DD/MM/YYYY strings
+        - Strings with backtick/quote prefix errors
+        """
+        if pd.isna(val):
+            return pd.NaT
 
-    # Parse dates with dayfirst=True
-    # This handles D/M/YYYY format correctly
-    # Without dayfirst=True, 12/4/2026 reads as December 4 not April 12
-    df['date'] = pd.to_datetime(
-        df['date'], dayfirst=True, errors='coerce')
+        # Already a datetime — return as-is
+        if isinstance(val, pd.Timestamp) or hasattr(val, 'year'):
+            return pd.Timestamp(val)
+
+        # Clean string — remove backticks, quotes, spaces
+        val_str = str(val).strip().replace('`', '').replace("'", '').strip()
+
+        if not val_str or val_str == 'nan':
+            return pd.NaT
+
+        # Try YYYY-MM-DD format first (already correct)
+        try:
+            if '-' in val_str and len(val_str) >= 10:
+                return pd.to_datetime(val_str, format='%Y-%m-%d')
+        except:
+            pass
+
+        # Try D/M/YYYY or DD/MM/YYYY (dayfirst)
+        try:
+            if '/' in val_str:
+                return pd.to_datetime(val_str, dayfirst=True)
+        except:
+            pass
+
+        # Try DD.MM.YYYY
+        try:
+            if '.' in val_str:
+                return pd.to_datetime(val_str, dayfirst=True)
+        except:
+            pass
+
+        # Last resort
+        try:
+            return pd.to_datetime(val_str, dayfirst=True, errors='coerce')
+        except:
+            return pd.NaT
+
+    # Apply smart parser to each date value
+    df['date'] = df['date'].apply(parse_date_smart)
     df['date'] = df['date'].ffill()
 
     df['time'] = df['time'].astype(str).str.strip()
