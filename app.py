@@ -11,7 +11,7 @@ from database import get_connection
 from datetime import datetime
 
 st.set_page_config(
-    page_title="Ratna Field Dashboard",
+    page_title="Oil Field Dashboard",
     page_icon="🛢️",
     layout="wide",
     initial_sidebar_state="expanded"
