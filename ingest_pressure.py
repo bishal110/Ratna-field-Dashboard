@@ -54,11 +54,15 @@ def ingest_pressure():
     df['date'] = df['date'].ffill()
     df['time'] = df['time'].astype(str).str.strip()
 
+    # Parse date with dayfirst=True to handle D/M/YYYY format
+    # This prevents 12/4/2026 being read as December 4 instead of April 12
+    df['date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce')
+    df['date'] = df['date'].ffill()  # Forward fill after re-parsing
+
     df['timestamp'] = pd.to_datetime(
-        df['date'].astype(str) + ' ' + df['time'],
-        errors='coerce',
-        utc=True
-    ).dt.tz_localize(None)
+        df['date'].dt.strftime('%Y-%m-%d') + ' ' + df['time'].astype(str),
+        errors='coerce'
+    )
 
     df = df.dropna(subset=['timestamp'])
     print(f"   Valid timestamps: {len(df)}")
