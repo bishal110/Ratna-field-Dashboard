@@ -9,6 +9,19 @@ import plotly.graph_objects as go
 import plotly.express as px
 from database import get_connection
 from datetime import datetime
+import base64
+
+def get_base64_image(image_path):
+    """
+    Convert local image to base64 string so it can be
+    embedded directly in CSS without needing a URL.
+    This works both locally and on Streamlit Cloud.
+    """
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
+
+# Load background image
+bg_image = get_base64_image("offshore_pics.jpg")
 
 st.set_page_config(
     page_title="Oil Field Dashboard",
