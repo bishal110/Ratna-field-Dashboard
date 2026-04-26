@@ -293,24 +293,31 @@ def load_water_injection_trend(days=90):
     return filter_by_days(df, 'date', days)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR
+# TOP NAVIGATION BAR
 # ══════════════════════════════════════════════════════════════════════════════
 
-st.sidebar.image("ongc_logo.jpg", width=120)
-st.sidebar.title("Oil Field")
-st.sidebar.caption("Offshore Production Dashboard")
+header_col, update_col = st.columns([6, 2])
+with header_col:
+    st.image("ongc_logo.jpg", width=90)
+    st.markdown("### Oil Field Dashboard")
+with update_col:
+    st.caption(f"Last updated: {datetime.now().strftime('%d-%m-%Y %H:%M')}")
 
-page = st.sidebar.radio("Navigation", [
-    "🏠 Field Overview",
-    "📈 Production Trends",
-    "🔧 ESP Health",
-    "💧 Water Injection",
-    "📊 Pressure Analysis",
-    "⚠️ Early Warning"
-])
-
-st.sidebar.divider()
-st.sidebar.caption(f"Last updated: {datetime.now().strftime('%d-%m-%Y %H:%M')}")
+st.markdown("#### Navigation")
+page = st.radio(
+    "Select page",
+    [
+        "🏠 Field Overview",
+        "📈 Production Trends",
+        "🔧 ESP Health",
+        "💧 Water Injection",
+        "📊 Pressure Analysis",
+        "⚠️ Early Warning"
+    ],
+    horizontal=True,
+    label_visibility="collapsed"
+)
+st.divider()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — FIELD OVERVIEW
