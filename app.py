@@ -17,7 +17,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
 st.markdown("""
 <style>
     .metric-card {
@@ -26,13 +25,13 @@ st.markdown("""
         padding: 15px;
         border-left: 4px solid #00b4d8;
     }
-    .alert-red { border-left: 4px solid #e63946; }
+    .alert-red    { border-left: 4px solid #e63946; }
     .alert-yellow { border-left: 4px solid #f4a261; }
-    .alert-green { border-left: 4px solid #2a9d8f; }
+    .alert-green  { border-left: 4px solid #2a9d8f; }
 </style>
 """, unsafe_allow_html=True)
 
-PLATFORMS = ['R-7A', 'R-9A', 'R-10A', 'R-12A', 'R-12B', 'R-13A']
+PLATFORMS       = ['R-7A', 'R-9A', 'R-10A', 'R-12A', 'R-12B', 'R-13A']
 VALID_PLATFORMS = ['R-7A', 'R-9A', 'R-10A', 'R-12A', 'R-12B', 'R-13A']
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -41,9 +40,8 @@ VALID_PLATFORMS = ['R-7A', 'R-9A', 'R-10A', 'R-12A', 'R-12B', 'R-13A']
 
 def format_metric(value, decimals=1):
     """
-    Safely format a numeric value for display.
-    Returns 'N/A' for missing/null/nan values
-    instead of showing raw 'nan' string.
+    Safely format numeric value for display.
+    Returns N/A for missing/null/nan values.
     """
     try:
         if value is None:
@@ -54,40 +52,68 @@ def format_metric(value, decimals=1):
     except:
         return "N/A"
 
+def filter_by_days(df, date_col, days):
+    """
+    Filter dataframe by number of days from the LATEST date in data.
+    Uses max date in data NOT today's server date.
+    This ensures correct filtering regardless of server timezone.
+    """
+    if df.empty:
+        return df
+    df[date_col] = pd.to_datetime(df[date_col])
+    max_date     = df[date_col].max()
+    cutoff       = max_date - pd.Timedelta(days=days)
+    return df[df[date_col] >= cutoff]
+
 # ══════════════════════════════════════════════════════════════════════════════
 # DATA LOADING FUNCTIONS
 # ══════════════════════════════════════════════════════════════════════════════
 
 def load_latest_production():
     conn = get_connection()
-    df = pd.read_sql("""
+    df   = pd.read_sql("""
         SELECT * FROM oil_production
         WHERE date = (SELECT MAX(date) FROM oil_production)
     """, conn)
     conn.close()
-    # Safety net — only valid platforms and well names with '#'
     df = df[df['platform'].isin(VALID_PLATFORMS)]
     df = df[df['well_name'].str.contains('#', na=False)]
     return df
 
 def load_production_trend(days=30):
+    """
+    Load ALL production data then filter by days from latest date.
+    Avoids SQLite date() timezone issues on different servers.
+    """
     conn = get_connection()
-    df = pd.read_sql(f"""
+    df   = pd.read_sql("""
         SELECT date,
-               SUM(oil_rate_bpd) as total_oil,
-               SUM(liquid_rate_bpd) as total_liquid,
+               SUM(oil_rate_bpd)        as total_oil,
+               SUM(liquid_rate_bpd)     as total_liquid,
                SUM(production_loss_bbl) as total_loss
         FROM oil_production
-        WHERE date >= date('now', '-{days} days')
         GROUP BY date
         ORDER BY date
     """, conn)
     conn.close()
-    return df
+    return filter_by_days(df, 'date', days)
+
+def load_platform_trend(days=30):
+    """Load platform wise production trend"""
+    conn = get_connection()
+    df   = pd.read_sql("""
+        SELECT date, platform, SUM(oil_rate_bpd) as oil
+        FROM oil_production
+        WHERE platform IN ('R-7A','R-9A','R-10A','R-12A','R-12B','R-13A')
+        GROUP BY date, platform
+        ORDER BY date
+    """, conn)
+    conn.close()
+    return filter_by_days(df, 'date', days)
 
 def load_latest_pressure():
     conn = get_connection()
-    df = pd.read_sql("""
+    df   = pd.read_sql("""
         SELECT * FROM pressure_data
         ORDER BY timestamp DESC
         LIMIT 1
@@ -96,14 +122,14 @@ def load_latest_pressure():
     return df
 
 def load_pressure_trend(days=7):
+    """Load ALL pressure data then filter by days from latest timestamp"""
     conn = get_connection()
-    df = pd.read_sql(f"""
+    df   = pd.read_sql("""
         SELECT * FROM pressure_data
-        WHERE timestamp >= datetime('now', '-{days} days')
         ORDER BY timestamp ASC
     """, conn)
     conn.close()
-    return df
+    return filter_by_days(df, 'timestamp', days)
 
 def load_esp_data(well=None):
     conn = get_connection()
@@ -123,13 +149,27 @@ def load_esp_data(well=None):
 
 def load_water_injection():
     conn = get_connection()
-    df = pd.read_sql("""
+    df   = pd.read_sql("""
         SELECT * FROM water_injection
         WHERE date = (SELECT MAX(date) FROM water_injection)
         ORDER BY platform, well_name
     """, conn)
     conn.close()
     return df
+
+def load_water_injection_trend(days=90):
+    """Load ALL water injection data then filter by days from latest date"""
+    conn = get_connection()
+    df   = pd.read_sql("""
+        SELECT date,
+               SUM(flow_rate_bpd)       as total_bpd,
+               SUM(cumulative_flow_bbl) as cumulative
+        FROM water_injection
+        GROUP BY date
+        ORDER BY date
+    """, conn)
+    conn.close()
+    return filter_by_days(df, 'date', days)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -160,11 +200,11 @@ st.sidebar.caption(f"Last updated: {datetime.now().strftime('%d-%m-%Y %H:%M')}")
 if page == "🏠 Field Overview":
     st.title("🛢️ Ratna Field — Production Overview")
 
-    prod_df = load_latest_production()
+    prod_df     = load_latest_production()
     pressure_df = load_latest_pressure()
 
     if prod_df.empty:
-        st.warning("No production data found. Please run ingestion scripts first.")
+        st.warning("No production data found. Please run ingestion scripts.")
         st.stop()
 
     latest_date = prod_df['date'].max()
@@ -191,7 +231,7 @@ if page == "🏠 Field Overview":
 
     st.divider()
 
-    # ── PLATFORM SUMMARY TABLE ────────────────────────────────────────────────
+    # ── PLATFORM SUMMARY ──────────────────────────────────────────────────────
     st.subheader("📊 Platform Summary")
     platform_summary = prod_df.groupby('platform').agg(
         Oil_BOPD      = ('oil_rate_bpd',        'sum'),
@@ -203,7 +243,6 @@ if page == "🏠 Field Overview":
                              'Flowing', na=False, case=False).sum())
     ).reset_index()
 
-    # Add latest pressure per platform
     if not pressure_df.empty:
         press_row = pressure_df.iloc[0]
         platform_pressure = {
@@ -230,7 +269,7 @@ if page == "🏠 Field Overview":
 
     st.divider()
 
-    # ── CHARTS ROW ────────────────────────────────────────────────────────────
+    # ── CHARTS ────────────────────────────────────────────────────────────────
     col1, col2 = st.columns(2)
 
     with col1:
@@ -260,7 +299,7 @@ if page == "🏠 Field Overview":
             'Intermittent':         '#f4a261',
             'Self Flowing':         '#457b9d',
             'Workover':             '#e9c46a',
-            'ESP Downhole failure': '#c77dff',
+            'ESP Downhole failure':  '#c77dff',
             'Non-FLOWING (CD ESP)': '#e63946',
             'Unknown':              '#6c757d'
         }
@@ -285,9 +324,9 @@ if page == "🏠 Field Overview":
     filtered_df = prod_df if platform_filter == 'All' else \
         prod_df[prod_df['platform'] == platform_filter]
 
-    display_cols = ['platform', 'well_name', 'liquid_rate_bpd',
-                    'oil_rate_bpd', 'production_loss_bbl',
-                    'well_status', 'remarks']
+    display_cols   = ['platform', 'well_name', 'liquid_rate_bpd',
+                      'oil_rate_bpd', 'production_loss_bbl',
+                      'well_status', 'remarks']
     available_cols = [c for c in display_cols if c in filtered_df.columns]
 
     def color_status(val):
@@ -316,32 +355,54 @@ if page == "🏠 Field Overview":
 elif page == "📈 Production Trends":
     st.title("📈 Production Trends")
 
-    days = st.slider("Select time range (days)", 7, 365, 30)
+    # Get full date range from database
+    conn     = get_connection()
+    date_rng = pd.read_sql(
+        "SELECT MIN(date) as min_d, MAX(date) as max_d FROM oil_production",
+        conn).iloc[0]
+    conn.close()
+
+    min_date = pd.to_datetime(date_rng['min_d'])
+    max_date = pd.to_datetime(date_rng['max_d'])
+    max_days = max(1, (max_date - min_date).days + 1)
+
+    st.caption(f"📅 Data available: {min_date.strftime('%d-%b-%Y')} "
+               f"to {max_date.strftime('%d-%b-%Y')} ({max_days} days)")
+
+    days = st.slider("Select time range (days)", 1, max_days, min(30, max_days))
+
     trend_df = load_production_trend(days)
 
     if trend_df.empty:
-        st.warning("No trend data available for selected range.")
+        st.warning("No trend data available.")
         st.stop()
 
     trend_df['date'] = pd.to_datetime(trend_df['date']).dt.normalize()
 
+    # ── FIELD PRODUCTION TREND ────────────────────────────────────────────────
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=trend_df['date'], y=trend_df['total_oil'],
         name='Oil (BOPD)',
         line=dict(color='#00b4d8', width=2),
         fill='tozeroy',
-        fillcolor='rgba(0,180,216,0.1)'
+        fillcolor='rgba(0,180,216,0.1)',
+        mode='lines+markers',
+        marker=dict(size=6)
     ))
     fig.add_trace(go.Scatter(
         x=trend_df['date'], y=trend_df['total_liquid'],
         name='Liquid (BLPD)',
-        line=dict(color='#90e0ef', width=1.5, dash='dash')
+        line=dict(color='#90e0ef', width=1.5, dash='dash'),
+        mode='lines+markers',
+        marker=dict(size=6)
     ))
     fig.add_trace(go.Scatter(
         x=trend_df['date'], y=trend_df['total_loss'],
         name='Loss (BBL)',
-        line=dict(color='#e63946', width=1.5)
+        line=dict(color='#e63946', width=1.5),
+        mode='lines+markers',
+        marker=dict(size=6)
     ))
     fig.update_layout(
         title='Field Production Trend',
@@ -360,23 +421,15 @@ elif page == "📈 Production Trends":
 
     # ── PLATFORM WISE TREND ───────────────────────────────────────────────────
     st.subheader("Platform wise Oil Trend")
-    conn = get_connection()
-    plat_trend = pd.read_sql(f"""
-        SELECT date, platform, SUM(oil_rate_bpd) as oil
-        FROM oil_production
-        WHERE date >= date('now', '-{days} days')
-        AND platform IN ('R-7A','R-9A','R-10A','R-12A','R-12B','R-13A')
-        GROUP BY date, platform
-        ORDER BY date
-    """, conn)
-    conn.close()
+    plat_trend = load_platform_trend(days)
 
     if not plat_trend.empty:
         plat_trend['date'] = pd.to_datetime(plat_trend['date']).dt.normalize()
         fig2 = px.line(
             plat_trend, x='date', y='oil',
             color='platform',
-            title='Oil Production by Platform'
+            title='Oil Production by Platform',
+            markers=True
         )
         fig2.update_layout(
             height=400,
@@ -388,6 +441,22 @@ elif page == "📈 Production Trends":
         fig2.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
         fig2.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
         st.plotly_chart(fig2, use_container_width=True)
+
+    # ── PRODUCTION SUMMARY TABLE ──────────────────────────────────────────────
+    st.subheader("📋 Daily Production Summary")
+    summary = trend_df.copy()
+    summary['date'] = summary['date'].dt.strftime('%d-%b-%Y')
+    summary.columns = ['Date', 'Oil (BOPD)', 'Liquid (BLPD)', 'Loss (BBL)']
+    summary = summary.sort_values('Date', ascending=False)
+    st.dataframe(
+        summary.style.format({
+            'Oil (BOPD)':    '{:,.0f}',
+            'Liquid (BLPD)': '{:,.0f}',
+            'Loss (BBL)':    '{:,.0f}'
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 3 — ESP HEALTH
@@ -401,22 +470,16 @@ elif page == "🔧 ESP Health":
         st.warning("No ESP data found. Please add Avalon export files.")
         st.stop()
 
-    wells = sorted(esp_df['well_name'].unique().tolist())
+    wells         = sorted(esp_df['well_name'].unique().tolist())
     selected_well = st.selectbox("Select Well", wells)
 
     well_df = esp_df[esp_df['well_name'] == selected_well].copy()
     well_df['timestamp'] = pd.to_datetime(well_df['timestamp'])
     well_df = well_df.sort_values('timestamp')
 
-    # ── LATEST READING ────────────────────────────────────────────────────────
-    # Use most recent raw row for metric display
-    # Gives actual last reading not an average
     latest = well_df.iloc[-1]
 
     # ── RESAMPLE FOR CHARTS ───────────────────────────────────────────────────
-    # Raw data has readings every ~20 seconds — too dense for trend charts
-    # Resample to 12-hourly averages for clean visualization
-    # 12H matches your field shift change pattern (0600/1800)
     numeric_cols = [
         'motor_temp_1_c', 'vfd_output_frequency_hz',
         'pump_discharge_pressure_psi', 'pump_intake_pressure_psi',
@@ -434,7 +497,7 @@ elif page == "🔧 ESP Health":
         .reset_index()
     )
 
-    # ── LATEST READINGS METRICS ───────────────────────────────────────────────
+    # ── LATEST METRICS ────────────────────────────────────────────────────────
     st.subheader(f"Latest Reading — {selected_well}")
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🌡️ Motor Temp (°C)",
@@ -458,7 +521,6 @@ elif page == "🔧 ESP Health":
 
     st.divider()
 
-    # ── DATA RESOLUTION INFO ──────────────────────────────────────────────────
     st.caption(
         f"📊 Charts show 12-hourly averages | "
         f"Raw data points: {len(well_df):,} | "
@@ -467,15 +529,14 @@ elif page == "🔧 ESP Health":
         f"to {well_df['timestamp'].max().strftime('%d-%b-%Y')}"
     )
 
-    # ── MOTOR TEMPERATURE TREND ───────────────────────────────────────────────
+    # ── MOTOR TEMPERATURE ─────────────────────────────────────────────────────
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=well_df_resampled['timestamp'],
         y=well_df_resampled['motor_temp_1_c'],
         name='Motor Temp (°C)',
         line=dict(color='#e63946', width=2),
-        mode='lines+markers',
-        marker=dict(size=4)
+        mode='lines+markers', marker=dict(size=4)
     ))
     fig.add_hline(y=135, line_dash="dash", line_color="orange",
                   annotation_text="Warning: 135°C")
@@ -483,11 +544,9 @@ elif page == "🔧 ESP Health":
                   annotation_text="Critical: 150°C (Trip)")
     fig.update_layout(
         title=f'Motor Temperature Trend — {selected_well}',
-        xaxis_title='Date',
-        yaxis_title='Temperature (°C)',
+        xaxis_title='Date', yaxis_title='Temperature (°C)',
         height=350,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font_color='white',
         xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45)
     )
@@ -495,40 +554,32 @@ elif page == "🔧 ESP Health":
     fig.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
     st.plotly_chart(fig, use_container_width=True)
 
-    # ── PHASE CURRENT BALANCE ─────────────────────────────────────────────────
+    # ── PHASE CURRENT ─────────────────────────────────────────────────────────
     st.subheader("⚡ Phase Current Balance")
     fig2 = go.Figure()
     fig2.add_trace(go.Scatter(
         x=well_df_resampled['timestamp'],
         y=well_df_resampled['motor_current_a_amp'],
-        name='Phase A',
-        line=dict(color='#00b4d8'),
-        mode='lines+markers',
-        marker=dict(size=4)
+        name='Phase A', line=dict(color='#00b4d8'),
+        mode='lines+markers', marker=dict(size=4)
     ))
     fig2.add_trace(go.Scatter(
         x=well_df_resampled['timestamp'],
         y=well_df_resampled['motor_current_b_amp'],
-        name='Phase B',
-        line=dict(color='#f4a261'),
-        mode='lines+markers',
-        marker=dict(size=4)
+        name='Phase B', line=dict(color='#f4a261'),
+        mode='lines+markers', marker=dict(size=4)
     ))
     fig2.add_trace(go.Scatter(
         x=well_df_resampled['timestamp'],
         y=well_df_resampled['motor_current_c_amp'],
-        name='Phase C',
-        line=dict(color='#2a9d8f'),
-        mode='lines+markers',
-        marker=dict(size=4)
+        name='Phase C', line=dict(color='#2a9d8f'),
+        mode='lines+markers', marker=dict(size=4)
     ))
     fig2.update_layout(
         title='3-Phase Motor Current (12-hour averages)',
-        xaxis_title='Date',
-        yaxis_title='Current (Amps)',
+        xaxis_title='Date', yaxis_title='Current (Amps)',
         height=350,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
         font_color='white',
         xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45)
     )
@@ -538,30 +589,29 @@ elif page == "🔧 ESP Health":
 
     # ── PUMP PRESSURES ────────────────────────────────────────────────────────
     st.subheader("🔄 Pump Intake vs Discharge Pressure")
+    well_df_resampled['pump_dp'] = (
+        well_df_resampled['pump_discharge_pressure_psi'] -
+        well_df_resampled['pump_intake_pressure_psi']
+    )
+
     fig3 = go.Figure()
     fig3.add_trace(go.Scatter(
         x=well_df_resampled['timestamp'],
         y=well_df_resampled['pump_intake_pressure_psi'],
-        name='Intake Pressure (psi)',
-        line=dict(color='#90e0ef'),
-        mode='lines+markers',
-        marker=dict(size=4)
+        name='Intake Pressure (psi)', line=dict(color='#90e0ef'),
+        mode='lines+markers', marker=dict(size=4)
     ))
     fig3.add_trace(go.Scatter(
         x=well_df_resampled['timestamp'],
         y=well_df_resampled['pump_discharge_pressure_psi'],
-        name='Discharge Pressure (psi)',
-        line=dict(color='#0077b6'),
-        mode='lines+markers',
-        marker=dict(size=4)
+        name='Discharge Pressure (psi)', line=dict(color='#0077b6'),
+        mode='lines+markers', marker=dict(size=4)
     ))
     fig3.update_layout(
         title='Pump Pressure Trend (12-hour averages)',
         height=350,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font_color='white',
-        yaxis_title='Pressure (psi)',
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font_color='white', yaxis_title='Pressure (psi)',
         xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45)
     )
     fig3.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
@@ -574,10 +624,8 @@ elif page == "🔧 ESP Health":
     fig4.add_trace(go.Scatter(
         x=well_df_resampled['timestamp'],
         y=well_df_resampled['vfd_output_frequency_hz'],
-        name='VFD Frequency (Hz)',
-        line=dict(color='#e9c46a'),
-        mode='lines+markers',
-        marker=dict(size=4)
+        name='VFD Frequency (Hz)', line=dict(color='#e9c46a'),
+        mode='lines+markers', marker=dict(size=4)
     ))
     fig4.add_hline(y=60, line_dash="dash", line_color="red",
                    annotation_text="Max: 60 Hz")
@@ -586,28 +634,23 @@ elif page == "🔧 ESP Health":
     fig4.update_layout(
         title='VFD Frequency Trend (12-hour averages)',
         height=300,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font_color='white',
-        yaxis_title='Frequency (Hz)',
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font_color='white', yaxis_title='Frequency (Hz)',
         xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45)
     )
     fig4.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
     fig4.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
     st.plotly_chart(fig4, use_container_width=True)
 
-    # ── MOTOR LOAD TREND ──────────────────────────────────────────────────────
+    # ── MOTOR LOAD ────────────────────────────────────────────────────────────
     st.subheader("📊 Motor Load %")
     fig5 = go.Figure()
     fig5.add_trace(go.Scatter(
         x=well_df_resampled['timestamp'],
         y=well_df_resampled['motor_load_pct'],
-        name='Motor Load (%)',
-        line=dict(color='#c77dff'),
-        fill='tozeroy',
-        fillcolor='rgba(199,125,255,0.1)',
-        mode='lines+markers',
-        marker=dict(size=4)
+        name='Motor Load (%)', line=dict(color='#c77dff'),
+        fill='tozeroy', fillcolor='rgba(199,125,255,0.1)',
+        mode='lines+markers', marker=dict(size=4)
     ))
     fig5.add_hline(y=90, line_dash="dash", line_color="red",
                    annotation_text="Overload: 90%")
@@ -616,10 +659,8 @@ elif page == "🔧 ESP Health":
     fig5.update_layout(
         title='Motor Load Trend (12-hour averages)',
         height=300,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font_color='white',
-        yaxis_title='Load (%)',
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font_color='white', yaxis_title='Load (%)',
         xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45)
     )
     fig5.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
@@ -659,28 +700,33 @@ elif page == "💧 Water Injection":
                     'choke_size', 'ithp', 'status', 'flow_rate_sm3hr',
                     'flow_rate_bpd', 'injecting_hours',
                     'cumulative_flow_bbl', 'planned_wi_bpd']
-    available = [c for c in display_cols if c in wi_df.columns]
+    available    = [c for c in display_cols if c in wi_df.columns]
     st.dataframe(wi_df[available], use_container_width=True, hide_index=True)
 
     # ── HISTORICAL WI TREND ───────────────────────────────────────────────────
     st.subheader("📈 Historical Injection Trend")
-    days = st.slider("Days to show", 30, 365, 90)
-    conn = get_connection()
-    wi_trend = pd.read_sql(f"""
-        SELECT date,
-               SUM(flow_rate_bpd) as total_bpd,
-               SUM(cumulative_flow_bbl) as cumulative
-        FROM water_injection
-        WHERE date >= date('now', '-{days} days')
-        GROUP BY date
-        ORDER BY date
-    """, conn)
+
+    conn     = get_connection()
+    wi_range = pd.read_sql(
+        "SELECT MIN(date) as min_d, MAX(date) as max_d FROM water_injection",
+        conn).iloc[0]
     conn.close()
+
+    wi_min  = pd.to_datetime(wi_range['min_d'])
+    wi_max  = pd.to_datetime(wi_range['max_d'])
+    wi_days = max(1, (wi_max - wi_min).days + 1)
+
+    st.caption(f"📅 WI data: {wi_min.strftime('%d-%b-%Y')} "
+               f"to {wi_max.strftime('%d-%b-%Y')}")
+
+    days     = st.slider("Days to show", 1, wi_days, min(90, wi_days))
+    wi_trend = load_water_injection_trend(days)
 
     if not wi_trend.empty:
         wi_trend['date'] = pd.to_datetime(wi_trend['date']).dt.normalize()
         fig = px.line(wi_trend, x='date', y='total_bpd',
-                      title='Daily Water Injection Rate (BPD)')
+                      title='Daily Water Injection Rate (BPD)',
+                      markers=True)
         fig.update_layout(
             height=350,
             paper_bgcolor='rgba(0,0,0,0)',
@@ -698,7 +744,20 @@ elif page == "💧 Water Injection":
 elif page == "📊 Pressure Analysis":
     st.title("📊 Pipeline Pressure Analysis")
 
-    days = st.slider("Select time range (days)", 7, 180, 30)
+    conn      = get_connection()
+    pr_range  = pd.read_sql(
+        "SELECT MIN(timestamp) as min_t, MAX(timestamp) as max_t FROM pressure_data",
+        conn).iloc[0]
+    conn.close()
+
+    pr_min  = pd.to_datetime(pr_range['min_t'])
+    pr_max  = pd.to_datetime(pr_range['max_t'])
+    pr_days = max(1, (pr_max - pr_min).days + 1)
+
+    st.caption(f"📅 Pressure data: {pr_min.strftime('%d-%b-%Y')} "
+               f"to {pr_max.strftime('%d-%b-%Y')}")
+
+    days     = st.slider("Select time range (days)", 7, pr_days, min(30, pr_days))
     press_df = load_pressure_trend(days)
 
     if press_df.empty:
@@ -707,14 +766,12 @@ elif page == "📊 Pressure Analysis":
 
     press_df['timestamp'] = pd.to_datetime(press_df['timestamp'])
 
-    # ── OUTLIER FILTER ────────────────────────────────────────────────────────
-    # Remove unrealistic pressure spikes >200 KSC
-    # These are sensor errors or data entry mistakes
+    # Outlier filter — remove values >200 KSC (physically impossible)
     for col in press_df.select_dtypes(include='number').columns:
         press_df[col] = press_df[col].where(
             press_df[col] <= 200, other=None)
 
-    # ── ROUTE 1 — R10A TO HEERA ───────────────────────────────────────────────
+    # ── ROUTE 1 ───────────────────────────────────────────────────────────────
     st.subheader("🔵 Route 1 — R10A to Heera")
     st.caption("R9A + R13A + R10A crude → Heera Complex via 10\" 45km line")
 
@@ -736,17 +793,15 @@ elif page == "📊 Pressure Analysis":
         name='R13A L/P', line=dict(color='#ade8f4')))
     fig1.update_layout(
         height=400,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font_color='white',
-        yaxis_title='Pressure (KSC)',
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font_color='white', yaxis_title='Pressure (KSC)',
         xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45)
     )
     fig1.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
     fig1.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
     st.plotly_chart(fig1, use_container_width=True)
 
-    # ── ROUTE 2 — R12A TO HEERA ───────────────────────────────────────────────
+    # ── ROUTE 2 ───────────────────────────────────────────────────────────────
     st.subheader("🟠 Route 2 — R12A to Heera")
     st.caption("R7A + R12B + R12A crude → Heera Complex via 12\" 41km + 10\" 41km lines")
 
@@ -757,22 +812,17 @@ elif page == "📊 Pressure Analysis":
         line=dict(color='#f4a261')))
     fig2.add_trace(go.Scatter(
         x=press_df['timestamp'], y=press_df['r12a_r10a_rp'],
-        name='R12A R/P from R10A',
-        line=dict(color='#e76f51')))
+        name='R12A R/P from R10A', line=dict(color='#e76f51')))
     fig2.add_trace(go.Scatter(
         x=press_df['timestamp'], y=press_df['r12a_r12b_rp'],
-        name='R12A R/P from R12B',
-        line=dict(color='#e9c46a')))
+        name='R12A R/P from R12B', line=dict(color='#e9c46a')))
     fig2.add_trace(go.Scatter(
         x=press_df['timestamp'], y=press_df['r12a_hra_lp'],
-        name='R12A→HRA L/P',
-        line=dict(color='#264653')))
+        name='R12A→HRA L/P', line=dict(color='#264653')))
     fig2.update_layout(
         height=400,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font_color='white',
-        yaxis_title='Pressure (KSC)',
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font_color='white', yaxis_title='Pressure (KSC)',
         xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45)
     )
     fig2.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
@@ -801,10 +851,8 @@ elif page == "📊 Pressure Analysis":
     fig3.update_layout(
         title='Pipeline Differential Pressure (L/P - R/P)',
         height=350,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font_color='white',
-        yaxis_title='ΔP (KSC)',
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font_color='white', yaxis_title='ΔP (KSC)',
         xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45)
     )
     fig3.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
@@ -827,11 +875,10 @@ elif page == "⚠️ Early Warning":
             'well_name').last().reset_index()
 
         for _, row in latest_esp.iterrows():
-
-            # Motor temperature check
             temp        = row.get('motor_temp_1_c')
             intake_temp = row.get('pump_intake_temp_c')
 
+            # Motor temp check
             if temp and not pd.isna(temp):
                 if temp > 150:
                     alerts.append({
@@ -860,22 +907,22 @@ elif page == "⚠️ Early Warning":
                     alerts.append({
                         'Level':     '🔴 CRITICAL',
                         'Well':      row['well_name'],
-                        'Parameter': 'Motor ΔT (Motor-Intake)',
+                        'Parameter': 'Motor ΔT',
                         'Value':     f"{delta_t:.1f} °C",
-                        'Threshold': '>45°C ΔT critical',
+                        'Threshold': '>45°C critical',
                         'Action':    'Possible gas lock or scale — investigate'
                     })
                 elif delta_t > 35:
                     alerts.append({
                         'Level':     '🟡 WARNING',
                         'Well':      row['well_name'],
-                        'Parameter': 'Motor ΔT (Motor-Intake)',
+                        'Parameter': 'Motor ΔT',
                         'Value':     f"{delta_t:.1f} °C",
-                        'Threshold': '>35°C ΔT warning',
-                        'Action':    'Monitor — motor running hotter than normal'
+                        'Threshold': '>35°C warning',
+                        'Action':    'Motor running hotter than normal'
                     })
 
-            # Phase current imbalance
+            # Phase imbalance
             ca = row.get('motor_current_a_amp')
             cb = row.get('motor_current_b_amp')
             cc = row.get('motor_current_c_amp')
@@ -892,8 +939,8 @@ elif page == "⚠️ Early Warning":
                             'Well':      row['well_name'],
                             'Parameter': 'Phase Current Imbalance',
                             'Value':     f"{imbalance:.1f}%",
-                            'Threshold': '>10% imbalance',
-                            'Action':    'Possible cable degradation — plan megger test'
+                            'Threshold': '>10%',
+                            'Action':    'Cable degradation — plan megger test'
                         })
                     elif imbalance > 5:
                         alerts.append({
@@ -901,11 +948,11 @@ elif page == "⚠️ Early Warning":
                             'Well':      row['well_name'],
                             'Parameter': 'Phase Current Imbalance',
                             'Value':     f"{imbalance:.1f}%",
-                            'Threshold': '>5% imbalance',
-                            'Action':    'Monitor — early cable integrity concern'
+                            'Threshold': '>5%',
+                            'Action':    'Monitor cable health'
                         })
 
-            # VFD frequency check
+            # VFD check
             freq = row.get('vfd_output_frequency_hz')
             if freq and not pd.isna(freq):
                 if freq > 60:
@@ -914,20 +961,20 @@ elif page == "⚠️ Early Warning":
                         'Well':      row['well_name'],
                         'Parameter': 'VFD Frequency',
                         'Value':     f"{freq:.1f} Hz",
-                        'Threshold': '>60 Hz max',
+                        'Threshold': '>60 Hz',
                         'Action':    'Reduce frequency — above design limit'
                     })
-                elif freq < 40:
+                elif freq < 40 and freq > 0:
                     alerts.append({
                         'Level':     '🟡 WARNING',
                         'Well':      row['well_name'],
                         'Parameter': 'VFD Frequency',
                         'Value':     f"{freq:.1f} Hz",
-                        'Threshold': '<40 Hz min',
+                        'Threshold': '<40 Hz',
                         'Action':    'Check inflow — possible low reservoir pressure'
                     })
 
-    # ── PRESSURE TREND CHECKS ─────────────────────────────────────────────────
+    # ── PRESSURE CHECKS ───────────────────────────────────────────────────────
     press_df = load_pressure_trend(days=3)
     if not press_df.empty:
         press_df['timestamp'] = pd.to_datetime(press_df['timestamp'])
@@ -953,21 +1000,21 @@ elif page == "⚠️ Early Warning":
                             'Level':     '🔴 CRITICAL',
                             'Well':      'Field',
                             'Parameter': f'{label} Rising Fast',
-                            'Value':     f"+{trend:.1f} KSC in last 3 readings",
+                            'Value':     f"+{trend:.1f} KSC",
                             'Threshold': '>5 KSC rise',
-                            'Action':    'Back pressure building — check for wax/hydrate or pigging required'
+                            'Action':    'Back pressure building — check for wax/hydrate'
                         })
                     elif trend > 3:
                         alerts.append({
                             'Level':     '🟡 WARNING',
                             'Well':      'Field',
                             'Parameter': f'{label} Rising',
-                            'Value':     f"+{trend:.1f} KSC in last 3 readings",
+                            'Value':     f"+{trend:.1f} KSC",
                             'Threshold': '>3 KSC rise',
-                            'Action':    'Monitor back pressure trend closely'
+                            'Action':    'Monitor back pressure trend'
                         })
 
-    # ── DISPLAY ALERTS ────────────────────────────────────────────────────────
+    # ── DISPLAY ───────────────────────────────────────────────────────────────
     if alerts:
         alert_df = pd.DataFrame(alerts)
         alert_df['sort'] = alert_df['Level'].apply(
@@ -984,25 +1031,18 @@ elif page == "⚠️ Early Warning":
         st.success("✅ All parameters within normal range. No active alerts.")
 
     st.divider()
-
-    # ── THRESHOLD REFERENCE ───────────────────────────────────────────────────
-    st.subheader("⚙️ Alert Thresholds — Ratna Field Specific")
+    st.subheader("⚙️ Alert Thresholds — Ratna Field")
     st.info("""
-    **ESP Motor Temperature (Trip set at 150°C):**
-    - Normal: Intake Temp + 20-30°C above intake fluid temperature
-    - Warning: Motor Temp >135°C OR ΔT >35°C above intake temp
-    - Critical: Motor Temp >150°C OR ΔT >45°C above intake temp
+    **ESP Motor Temperature (Trip: 150°C):**
+    - Warning: >135°C OR ΔT >35°C above intake temp
+    - Critical: >150°C OR ΔT >45°C above intake temp
 
     **Phase Current Imbalance:**
-    - Warning: >5% imbalance between phases
-    - Critical: >10% imbalance — possible cable degradation
+    - Warning: >5% | Critical: >10%
 
-    **VFD Operating Frequency (Ratna Field range: 40-60 Hz):**
+    **VFD Frequency (40-60 Hz):**
     - Warning: <40 Hz (low inflow) or >60 Hz (above design)
 
-    **Pipeline Launcher Pressure Rising:**
-    - Warning: >3 KSC increase in 3 consecutive readings
-    - Critical: >5 KSC increase in 3 consecutive readings
-
-    *Thresholds calibrated for Ratna Field offshore conditions*
+    **Pipeline Launcher Pressure:**
+    - Warning: >3 KSC rise | Critical: >5 KSC rise in 3 readings
     """)
