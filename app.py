@@ -175,11 +175,8 @@ def load_water_injection_trend(days=90):
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════════
 
-st.sidebar.image(
-    "https://upload.wikimedia.org/wikipedia/en/thumb/f/f4/ONGC_Logo.svg/200px-ONGC_Logo.svg.png",
-    width=120
-)
-st.sidebar.title("Ratna Field")
+st.sidebar.image("ongc_logo.jpg", width=120)
+st.sidebar.title("Oil Field")
 st.sidebar.caption("Offshore Production Dashboard")
 
 page = st.sidebar.radio("Navigation", [
