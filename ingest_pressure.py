@@ -50,17 +50,24 @@ def ingest_pressure():
     df = df.reset_index(drop=True)
 
     df['date'] = df['date'].replace('', np.nan)
-    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+
+    # Clean date values — remove any non-date characters like backticks
+    # Some rows have data entry errors like `22/8/2020
+    df['date'] = df['date'].astype(str).str.replace(
+        r'[`\'\"]+', '', regex=True).str.strip()
+    df['date'] = df['date'].replace('nan', np.nan)
+
+    # Parse dates with dayfirst=True
+    # This handles D/M/YYYY format correctly
+    # Without dayfirst=True, 12/4/2026 reads as December 4 not April 12
+    df['date'] = pd.to_datetime(
+        df['date'], dayfirst=True, errors='coerce')
     df['date'] = df['date'].ffill()
+
     df['time'] = df['time'].astype(str).str.strip()
 
-    # Parse date with dayfirst=True to handle D/M/YYYY format
-    # This prevents 12/4/2026 being read as December 4 instead of April 12
-    df['date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce')
-    df['date'] = df['date'].ffill()  # Forward fill after re-parsing
-
     df['timestamp'] = pd.to_datetime(
-        df['date'].dt.strftime('%Y-%m-%d') + ' ' + df['time'].astype(str),
+        df['date'].dt.strftime('%Y-%m-%d') + ' ' + df['time'],
         errors='coerce'
     )
 
