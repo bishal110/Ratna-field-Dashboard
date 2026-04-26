@@ -260,9 +260,8 @@ def detect_cross_parameter_anomalies(pivot_df):
         if ('pump_discharge_pressure_psi' in well_data.columns and
                 'pump_intake_pressure_psi' in well_data.columns):
 
-            dp_negative = (
-                well_data['pump_discharge_pressure_psi'] 
-                well_data['pump_intake_pressure_psi']
+            dp_negative =(
+                well_data['pump_discharge_pressure_psi'] - well_data['pump_intake_pressure_psi']
             ).sum()
 
             if dp_negative > 0:
