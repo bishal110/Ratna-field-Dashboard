@@ -14,8 +14,7 @@ CONFIG = {
     # Can be absolute path or relative to project
     # Example: 'C:/Users/bisha/Production Data'
     # For now points to data/raw for single file testing
-    'production_root': os.path.join(
-        os.path.dirname(__file__), "data", "raw"),
+    'production_root': 'C:\\Users\\bisha\\Documents\\Production files',
 
     # Only ingest files matching these time patterns (0600hrs files)
     # Case insensitive — add more variants if needed
