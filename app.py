@@ -590,11 +590,28 @@ if page == "Field Overview":
 
     st.markdown("<div style='margin-top:16px'></div>", unsafe_allow_html=True)
     st.divider()
-    c1,c2 = st.columns(2)
-    with c1:
+    chart_col1, chart_col2 = st.columns(2)
+    with chart_col1:
         st.subheader("🛢️ Oil Contribution by Platform")
         fig = px.pie(plat, values='Oil_BOPD', names='platform',
                      color_discrete_sequence=px.colors.sequential.Blues_r)
+        fig.update_traces(textposition='inside', textinfo='percent+label')
+        fig.update_layout(**CHART, showlegend=True, height=340)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with chart_col2:
+        st.subheader("⚡ Well Status Distribution")
+        sc = prod_df['well_status'].fillna('Unknown').value_counts().reset_index()
+        sc.columns = ['Status','Count']
+        fig2 = px.bar(sc, x='Status', y='Count', color='Status',
+            color_discrete_map={
+                'Flowing':'#2a9d8f','Non-Flowing':'#e63946',
+                'Intermittent':'#f4a261','Self Flowing':'#457b9d',
+                'Workover':'#e9c46a','ESP Downhole failure':'#c77dff',
+                'Non-FLOWING (CD ESP)':'#e63946','Unknown':'#6c757d'})
+        fig2.update_layout(**CHART, showlegend=False, height=340)
+        st.plotly_chart(fig2, use_container_width=True)
+        color_discrete_sequence=px.colors.sequential.Blues_r
         fig.update_traces(textposition='inside', textinfo='percent+label')
         fig.update_layout(**CHART, showlegend=True, height=340)
         st.plotly_chart(fig, use_container_width=True)
