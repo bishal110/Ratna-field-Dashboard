@@ -292,33 +292,179 @@ def load_water_injection_trend(days=90):
     conn.close()
     return filter_by_days(df, 'date', days)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TOP NAVIGATION BAR
-# ══════════════════════════════════════════════════════════════════════════════
+# ── TOP NAVIGATION BAR ────────────────────────────────────────────────────────
+st.markdown(f"""
+<style>
+    /* Hide default sidebar */
+    [data-testid="stSidebar"] {{
+        display: none;
+    }}
 
-header_col, update_col = st.columns([6, 2])
-with header_col:
-    st.image("ongc_logo.jpg", width=90)
-    st.markdown("### Oil Field Dashboard")
-with update_col:
-    st.caption(f"Last updated: {datetime.now().strftime('%d-%m-%Y %H:%M')}")
+    /* Top navbar */
+    .navbar {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 999;
+        background: rgba(0, 10, 30, 0.90);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(0, 180, 216, 0.25);
+        padding: 0 24px;
+        display: flex;
+        align-items: center;
+        height: 56px;
+        gap: 8px;
+    }}
 
-st.markdown("#### Navigation")
-page = st.radio(
-    "Select page",
-    [
-        "🏠 Field Overview",
-        "📈 Production Trends",
-        "🔧 ESP Health",
-        "💧 Water Injection",
-        "📊 Pressure Analysis",
-        "⚠️ Early Warning"
-    ],
-    horizontal=True,
-    label_visibility="collapsed"
-)
-st.divider()
+    .navbar-brand {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-right: 32px;
+        text-decoration: none;
+    }}
 
+    .navbar-brand img {{
+        height: 36px;
+        width: auto;
+    }}
+
+    .navbar-brand-text {{
+        font-family: 'Rajdhani', sans-serif;
+        font-size: 18px;
+        font-weight: 700;
+        color: #ffffff;
+        letter-spacing: 1px;
+        white-space: nowrap;
+    }}
+
+    .nav-link {{
+        font-family: 'Inter', sans-serif;
+        font-size: 13px;
+        font-weight: 500;
+        color: rgba(144, 224, 239, 0.75);
+        padding: 6px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+        text-decoration: none;
+        letter-spacing: 0.3px;
+    }}
+
+    .nav-link:hover {{
+        color: #ffffff;
+        background: rgba(0, 180, 216, 0.15);
+    }}
+
+    .nav-link.active {{
+        color: #ffffff;
+        background: rgba(0, 180, 216, 0.25);
+        border: 1px solid rgba(0, 180, 216, 0.4);
+    }}
+
+    .nav-spacer {{
+        flex: 1;
+    }}
+
+    .nav-timestamp {{
+        font-family: 'Inter', sans-serif;
+        font-size: 11px;
+        color: rgba(144, 224, 239, 0.5);
+        white-space: nowrap;
+    }}
+
+    /* Push content below navbar */
+    .main .block-container {{
+        padding-top: 80px !important;
+        animation: fadeIn 0.4s ease-in-out;
+    }}
+
+    @keyframes fadeIn {{
+        from {{ opacity: 0; transform: translateY(8px); }}
+        to   {{ opacity: 1; transform: translateY(0); }}
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+# Navigation pages
+PAGES = [
+    ("🏠", "Field Overview"),
+    ("📈", "Production Trends"),
+    ("🔧", "ESP Health"),
+    ("💧", "Water Injection"),
+    ("📊", "Pressure Analysis"),
+    ("⚠️", "Early Warning"),
+]
+
+# Use query params to track active page
+if 'page' not in st.session_state:
+    st.session_state.page = "Field Overview"
+
+# Build navbar HTML
+nav_links = ""
+for icon, name in PAGES:
+    active_class = "active" if st.session_state.page == name else ""
+    nav_links += f"""
+        <span class="nav-link {active_class}"
+              onclick="window.location.href='?page={name.replace(' ', '_')}'"
+              id="nav-{name.replace(' ', '_')}">
+            {icon} {name}
+        </span>
+    """
+
+# Read image for navbar logo
+logo_b64 = get_base64_image("ongc_logo.jpg")
+logo_img = f'<img src="data:image/jpeg;base64,{logo_b64}">' if logo_b64 else "⚡"
+
+st.markdown(f"""
+<div class="navbar">
+    <div class="navbar-brand">
+        {logo_img}
+        <span class="navbar-brand-text">OIL FIELD</span>
+    </div>
+    {nav_links}
+    <div class="nav-spacer"></div>
+    <span class="nav-timestamp">
+        🕐 {datetime.now().strftime('%d-%b-%Y %H:%M')}
+    </span>
+</div>
+""", unsafe_allow_html=True)
+
+# Handle page selection via Streamlit buttons (hidden visually)
+cols = st.columns(len(PAGES))
+for i, (icon, name) in enumerate(PAGES):
+    with cols[i]:
+        if st.button(f"{icon} {name}", key=f"nav_{name}",
+                     use_container_width=True):
+            st.session_state.page = name
+            st.rerun()
+
+# Hide the Streamlit buttons visually but keep them functional
+st.markdown("""
+<style>
+    /* Hide nav buttons — they work invisibly behind navbar */
+    [data-testid="stHorizontalBlock"] {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        height: 56px;
+        opacity: 0;
+        gap: 0 !important;
+    }}
+    [data-testid="stHorizontalBlock"] > div {{
+        padding: 0 !important;
+        height: 56px;
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+page = st.session_state.page
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — FIELD OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
