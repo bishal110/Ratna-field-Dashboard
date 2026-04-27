@@ -90,7 +90,7 @@ st.markdown(f"""
 
 .nav-btn-row {{
     position: fixed !important;
-    top: 0 !important; left: 160px !important; right: 160px !important;
+    top: 0 !important; left: 0 !important; right: 0 !important;
     z-index: 1001 !important; height: 54px !important; display: flex !important;
 }}
 .nav-btn-row > div[data-testid="column"] {{
@@ -527,10 +527,7 @@ if page == "Field Overview":
             ">{value}</div>
             <div style="display:flex; align-items:center; gap:8px;">
                 {change_html}
-                <span style="
-                    font-family:'Inter',sans-serif;
-                    font-size:10px; color:rgba(144,224,239,0.4);
-                ">{subtitle}</span>
+                <span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.4);">{subtitle}</span>
             </div>
         </div>
         """
@@ -586,11 +583,15 @@ if page == "Field Overview":
         ), unsafe_allow_html=True)
 
     with c5:
+        # Red highlight if wells down > 0
+        wells_down_html = f'<span style="color:#e63946;font-size:13px;font-weight:500;">⚠️ {wells_down} offline</span>' \
+                          if wells_down > 0 else \
+                          f'<span style="color:#2a9d8f;font-size:13px;font-weight:500;">✅ All running</span>'
         st.markdown(kpi_card(
             "Wells Down",
             f"{wells_down}",
-            subtitle="non-flowing / workover",
-            change_html=""
+            subtitle="",
+            change_html=wells_down_html
         ), unsafe_allow_html=True)
 
     # Small spacing after cards
