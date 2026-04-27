@@ -9,7 +9,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from database import get_connection
-from datetime import datetime
+from datetime import datetime, date, timedelta
+from dateutil.relativedelta import relativedelta
 
 st.set_page_config(
     page_title="Oil Field Dashboard",
@@ -36,7 +37,6 @@ st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap');
 
-/* BACKGROUND */
 .stApp {{
     background-image: linear-gradient(rgba(0,0,0,0.60),rgba(0,10,30,0.72)), {bg_url};
     background-size: cover;
@@ -44,23 +44,19 @@ st.markdown(f"""
     background-attachment: fixed;
 }}
 
-/* HIDE SIDEBAR */
-[data-testid="stSidebar"]       {{ display: none !important; }}
+[data-testid="stSidebar"]        {{ display: none !important; }}
 [data-testid="collapsedControl"] {{ display: none !important; }}
 
 /* NAVBAR */
 .navbar {{
     position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
-    background: rgba(0,8,24,0.92);
-    backdrop-filter: blur(14px);
+    background: rgba(0,8,24,0.92); backdrop-filter: blur(14px);
     border-bottom: 1px solid rgba(0,180,216,0.25);
     display: flex; align-items: center;
     height: 54px; padding: 0 20px; gap: 4px;
     pointer-events: none;
 }}
-.nb-brand {{
-    display:flex; align-items:center; gap:8px; margin-right:20px;
-}}
+.nb-brand {{ display:flex; align-items:center; gap:8px; margin-right:20px; }}
 .nb-brand img {{ height:32px; width:auto; border-radius:4px; }}
 .nb-brand-text {{
     font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700;
@@ -72,8 +68,7 @@ st.markdown(f"""
     white-space:nowrap;
 }}
 .nb-item.active {{
-    color:#fff;
-    background:rgba(0,180,216,0.22);
+    color:#fff; background:rgba(0,180,216,0.22);
     border:1px solid rgba(0,180,216,0.4);
 }}
 .nb-spacer {{ flex:1; }}
@@ -82,7 +77,6 @@ st.markdown(f"""
     color:rgba(144,224,239,0.5); white-space:nowrap;
 }}
 
-/* CONTENT PADDING — pushes below navbar */
 .main .block-container {{
     padding-top: 70px !important;
     padding-left: 2rem !important;
@@ -94,34 +88,25 @@ st.markdown(f"""
     to   {{ opacity:1; transform:translateY(0); }}
 }}
 
-/* NAV BUTTONS — invisible layer covering navbar exactly */
 .nav-btn-row {{
     position: fixed !important;
     top: 0 !important; left: 160px !important; right: 160px !important;
-    z-index: 1001 !important;
-    height: 54px !important;
-    display: flex !important;
+    z-index: 1001 !important; height: 54px !important; display: flex !important;
 }}
 .nav-btn-row > div[data-testid="column"] {{
-    flex: 1 !important;
-    height: 54px !important;
-    padding: 0 !important;
+    flex: 1 !important; height: 54px !important; padding: 0 !important;
 }}
 .nav-btn-row button {{
-    width: 100% !important;
-    height: 54px !important;
-    opacity: 0 !important;
-    border-radius: 0 !important;
-    border: none !important;
-    cursor: pointer !important;
+    width: 100% !important; height: 54px !important;
+    opacity: 0 !important; border-radius: 0 !important;
+    border: none !important; cursor: pointer !important;
 }}
 
 /* METRIC CARDS */
 [data-testid="stMetric"] {{
     background: rgba(255,255,255,0.05) !important;
     border: 1px solid rgba(0,180,216,0.22) !important;
-    border-radius: 10px !important;
-    padding: 14px !important;
+    border-radius: 10px !important; padding: 14px !important;
     backdrop-filter: blur(8px) !important;
     transition: all 0.25s ease !important;
 }}
@@ -142,13 +127,11 @@ st.markdown(f"""
     font-size: 1.9rem !important; font-weight: 600 !important;
 }}
 
-/* HEADINGS */
 h1,h2,h3 {{ font-family:'Rajdhani',sans-serif !important; letter-spacing:1px !important; }}
 h1 {{ color:#fff !important; font-weight:700 !important; }}
 h2 {{ color:#90e0ef !important; font-weight:600 !important; }}
 h3 {{ color:#caf0f8 !important; font-weight:500 !important; }}
 
-/* DATAFRAME */
 [data-testid="stDataFrame"] {{
     background: rgba(255,255,255,0.03) !important;
     border: 1px solid rgba(0,180,216,0.13) !important;
@@ -162,6 +145,64 @@ hr {{ border-color: rgba(0,180,216,0.18) !important; }}
 ::-webkit-scrollbar-thumb {{ background: rgba(0,180,216,0.35); border-radius:4px; }}
 
 .stCaption {{ color: rgba(144,224,239,0.65) !important; }}
+
+/* STYLED SELECTBOX — dark glass theme */
+[data-testid="stSelectbox"] > div > div {{
+    background: rgba(0,8,24,0.85) !important;
+    border: 1px solid rgba(0,180,216,0.3) !important;
+    border-radius: 8px !important;
+    backdrop-filter: blur(10px) !important;
+    color: #90e0ef !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 12px !important;
+}}
+[data-testid="stSelectbox"] > div > div:hover {{
+    border-color: rgba(0,180,216,0.6) !important;
+    background: rgba(0,20,50,0.90) !important;
+}}
+[data-testid="stSelectbox"] label {{
+    color: rgba(144,224,239,0.7) !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 11px !important;
+}}
+
+/* STYLED DATE INPUT */
+[data-testid="stDateInput"] > div > div > input {{
+    background: rgba(0,8,24,0.85) !important;
+    border: 1px solid rgba(0,180,216,0.3) !important;
+    border-radius: 8px !important;
+    color: #90e0ef !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 12px !important;
+}}
+[data-testid="stDateInput"] label {{
+    color: rgba(144,224,239,0.7) !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 11px !important;
+}}
+
+/* ESP PILL BUTTONS */
+.pill-container {{
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-bottom: 16px;
+}}
+.pill {{
+    font-family: 'Inter', sans-serif;
+    font-size: 12px; font-weight: 500;
+    color: rgba(144,224,239,0.75);
+    padding: 5px 14px; border-radius: 20px;
+    border: 1px solid rgba(0,180,216,0.25);
+    background: rgba(0,8,24,0.7);
+    backdrop-filter: blur(8px);
+    cursor: pointer; white-space: nowrap;
+    transition: all 0.2s ease;
+}}
+.pill.active {{
+    color: #fff;
+    background: rgba(0,180,216,0.25);
+    border-color: rgba(0,180,216,0.5);
+    box-shadow: 0 0 12px rgba(0,180,216,0.2);
+}}
 
 /* LIGHT MODE */
 @media (prefers-color-scheme: light) {{
@@ -197,7 +238,6 @@ PAGES = [
 if 'page' not in st.session_state:
     st.session_state.page = "Field Overview"
 
-# ── STEP 1: Render visual navbar ──────────────────────────────────────────────
 nav_html = ""
 for icon, name in PAGES:
     cls = "nb-item active" if st.session_state.page == name else "nb-item"
@@ -207,19 +247,13 @@ logo_html = f'<img src="{logo_src}" />' if logo_src else "⚡"
 
 st.markdown(f"""
 <div class="navbar">
-    <div class="nb-brand">
-        {logo_html}
-        <span class="nb-brand-text">OIL FIELD</span>
-    </div>
+    <div class="nb-brand">{logo_html}<span class="nb-brand-text">OIL FIELD</span></div>
     {nav_html}
     <div class="nb-spacer"></div>
     <span class="nb-time">🕐 {datetime.now().strftime('%d-%b-%Y %H:%M')}</span>
 </div>
 """, unsafe_allow_html=True)
 
-# ── STEP 2: Invisible Streamlit buttons over navbar ───────────────────────────
-# These are the actual clickable elements
-# CSS positions them over the navbar items
 st.markdown('<div class="nav-btn-row">', unsafe_allow_html=True)
 cols = st.columns(len(PAGES))
 for i, (icon, name) in enumerate(PAGES):
@@ -242,6 +276,9 @@ CHART = dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
              font_color='white')
 GRID  = dict(showgrid=True, gridcolor='rgba(255,255,255,0.08)')
 
+TIME_OPTIONS = ["1 Day", "5 Days", "1 Month", "3 Months",
+                "6 Months", "1 Year", "Custom"]
+
 def format_metric(value, decimals=1):
     try:
         if value is None: return "N/A"
@@ -250,10 +287,69 @@ def format_metric(value, decimals=1):
     except:
         return "N/A"
 
-def filter_by_days(df, date_col, days):
+def get_date_range(key, db_min, db_max, default="3 Months"):
+    """
+    Renders a right-aligned styled dropdown for time range selection.
+    When Custom is selected, shows from/to date pickers with calendar.
+    Returns (date_from, date_to) as date objects.
+
+    key       — unique key for session state
+    db_min    — earliest date in database (date object)
+    db_max    — latest date in database (date object)
+    default   — default selection from TIME_OPTIONS
+    """
+    # Right-align the selector by using columns
+    _, right = st.columns([3, 1])
+    with right:
+        selected = st.selectbox(
+            "📅 Range",
+            TIME_OPTIONS,
+            index=TIME_OPTIONS.index(default),
+            key=f"range_{key}"
+        )
+
+    if selected == "Custom":
+        col1, col2 = st.columns(2)
+        with col1:
+            date_from = st.date_input(
+                "From date",
+                value=db_min,
+                min_value=db_min,
+                max_value=db_max,
+                key=f"from_{key}",
+                format="DD/MM/YYYY"
+            )
+        with col2:
+            date_to = st.date_input(
+                "To date",
+                value=db_max,
+                min_value=db_min,
+                max_value=db_max,
+                key=f"to_{key}",
+                format="DD/MM/YYYY"
+            )
+    else:
+        date_to = db_max
+        delta_map = {
+            "1 Day":    timedelta(days=1),
+            "5 Days":   timedelta(days=5),
+            "1 Month":  relativedelta(months=1),
+            "3 Months": relativedelta(months=3),
+            "6 Months": relativedelta(months=6),
+            "1 Year":   relativedelta(years=1),
+        }
+        date_from = max(db_min, date_to - delta_map[selected])
+
+    return date_from, date_to
+
+def filter_df_by_dates(df, date_col, date_from, date_to):
+    """Filter dataframe between two date objects"""
     if df.empty: return df
     df[date_col] = pd.to_datetime(df[date_col])
-    return df[df[date_col] >= df[date_col].max() - pd.Timedelta(days=days)]
+    return df[
+        (df[date_col].dt.date >= date_from) &
+        (df[date_col].dt.date <= date_to)
+    ]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DATA LOADING
@@ -269,7 +365,7 @@ def load_latest_production():
     df = df[df['well_name'].str.contains('#', na=False)]
     return df
 
-def load_production_trend(days=30):
+def load_all_production():
     conn = get_connection()
     df = pd.read_sql("""SELECT date,
         SUM(oil_rate_bpd) as total_oil,
@@ -277,16 +373,16 @@ def load_production_trend(days=30):
         SUM(production_loss_bbl) as total_loss
         FROM oil_production GROUP BY date ORDER BY date""", conn)
     conn.close()
-    return filter_by_days(df, 'date', days)
+    return df
 
-def load_platform_trend(days=30):
+def load_all_platform_trend():
     conn = get_connection()
     df = pd.read_sql("""SELECT date, platform, SUM(oil_rate_bpd) as oil
         FROM oil_production
         WHERE platform IN ('R-7A','R-9A','R-10A','R-12A','R-12B','R-13A')
         GROUP BY date, platform ORDER BY date""", conn)
     conn.close()
-    return filter_by_days(df, 'date', days)
+    return df
 
 def load_latest_pressure():
     conn = get_connection()
@@ -295,12 +391,15 @@ def load_latest_pressure():
     conn.close()
     return df
 
-def load_pressure_trend(days=30):
+def load_all_pressure():
     conn = get_connection()
     df = pd.read_sql(
         "SELECT * FROM pressure_data ORDER BY timestamp ASC", conn)
     conn.close()
-    return filter_by_days(df, 'timestamp', days)
+    # Clean outliers
+    for col in df.select_dtypes(include='number').columns:
+        df[col] = df[col].where(df[col] <= 200, other=None)
+    return df
 
 def load_esp_data(well=None):
     conn = get_connection()
@@ -322,14 +421,25 @@ def load_water_injection():
     conn.close()
     return df
 
-def load_water_injection_trend(days=90):
+def load_all_water_injection_trend():
     conn = get_connection()
     df = pd.read_sql("""SELECT date,
         SUM(flow_rate_bpd) as total_bpd,
         SUM(cumulative_flow_bbl) as cumulative
-        FROM water_injection GROUP BY date ORDER BY date""", conn)
+        FROM water_injection
+        WHERE date >= '2000-01-01'
+        GROUP BY date ORDER BY date""", conn)
     conn.close()
-    return filter_by_days(df, 'date', days)
+    return df
+
+def get_db_date_range(table, date_col='date'):
+    """Get min/max dates from a table, filtering bad dates"""
+    conn = get_connection()
+    df = pd.read_sql(
+        f"SELECT MIN({date_col}) as mn, MAX({date_col}) as mx FROM {table} WHERE {date_col} >= '2000-01-01'",
+        conn).iloc[0]
+    conn.close()
+    return pd.to_datetime(df['mn']).date(), pd.to_datetime(df['mx']).date()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — FIELD OVERVIEW
@@ -439,60 +549,72 @@ if page == "Field Overview":
 elif page == "Production Trends":
     st.title("📈 Production Trends")
 
-    conn = get_connection()
-    dr = pd.read_sql(
-        "SELECT MIN(date) as mn, MAX(date) as mx FROM oil_production",
-        conn).iloc[0]
-    conn.close()
-    mn, mx   = pd.to_datetime(dr['mn']), pd.to_datetime(dr['mx'])
-    max_days = max(1, (mx - mn).days + 1)
-    st.caption(f"📅 {mn.strftime('%d-%b-%Y')} to {mx.strftime('%d-%b-%Y')} ({max_days} days)")
+    prod_min, prod_max = get_db_date_range('oil_production')
+    all_trend = load_all_production()
+    all_plat  = load_all_platform_trend()
 
-    days  = st.slider("Time range (days)", 1, max_days, min(30, max_days))
-    trend = load_production_trend(days)
-    if trend.empty:
+    if all_trend.empty:
         st.warning("No data available.")
         st.stop()
 
+    # ── FIELD PRODUCTION TREND ────────────────────────────────────────────────
+    st.markdown("### Field Production Trend")
+    f_from, f_to = get_date_range("field_trend", prod_min, prod_max,
+                                   default="3 Months")
+    trend = filter_df_by_dates(all_trend.copy(), 'date', f_from, f_to)
     trend['date'] = pd.to_datetime(trend['date']).dt.normalize()
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=trend['date'], y=trend['total_oil'],
-        name='Oil (BOPD)', line=dict(color='#00b4d8', width=2),
-        fill='tozeroy', fillcolor='rgba(0,180,216,0.08)',
-        mode='lines+markers', marker=dict(size=6)))
-    fig.add_trace(go.Scatter(x=trend['date'], y=trend['total_liquid'],
-        name='Liquid (BLPD)',
-        line=dict(color='#90e0ef', width=1.5, dash='dash'),
-        mode='lines+markers', marker=dict(size=6)))
-    fig.add_trace(go.Scatter(x=trend['date'], y=trend['total_loss'],
-        name='Loss (BBL)', line=dict(color='#e63946', width=1.5),
-        mode='lines+markers', marker=dict(size=6)))
-    fig.update_layout(**CHART, title='Field Production Trend', height=440,
-        xaxis_title='Date', yaxis_title='Barrels',
-        legend=dict(orientation='h', yanchor='bottom', y=1.02),
-        xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45))
-    fig.update_xaxes(**GRID); fig.update_yaxes(**GRID)
-    st.plotly_chart(fig, use_container_width=True)
+    if not trend.empty:
+        st.caption(f"📅 {f_from.strftime('%d-%b-%Y')} → {f_to.strftime('%d-%b-%Y')} | {len(trend)} data points")
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=trend['date'], y=trend['total_oil'],
+            name='Oil (BOPD)', line=dict(color='#00b4d8', width=2),
+            fill='tozeroy', fillcolor='rgba(0,180,216,0.08)',
+            mode='lines+markers', marker=dict(size=6)))
+        fig.add_trace(go.Scatter(x=trend['date'], y=trend['total_liquid'],
+            name='Liquid (BLPD)',
+            line=dict(color='#90e0ef', width=1.5, dash='dash'),
+            mode='lines+markers', marker=dict(size=6)))
+        fig.add_trace(go.Scatter(x=trend['date'], y=trend['total_loss'],
+            name='Loss (BBL)', line=dict(color='#e63946', width=1.5),
+            mode='lines+markers', marker=dict(size=6)))
+        fig.update_layout(**CHART, height=420,
+            xaxis_title='Date', yaxis_title='Barrels',
+            legend=dict(orientation='h', yanchor='bottom', y=1.02),
+            xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45))
+        fig.update_xaxes(**GRID); fig.update_yaxes(**GRID)
+        st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("Platform wise Oil Trend")
-    pt = load_platform_trend(days)
+        # Daily summary follows same date range
+        st.subheader("📋 Daily Production Summary")
+        s = trend.copy()
+        s['date'] = s['date'].dt.strftime('%d-%b-%Y')
+        s.columns = ['Date','Oil (BOPD)','Liquid (BLPD)','Loss (BBL)']
+        st.dataframe(s.sort_values('Date', ascending=False).style.format(
+            {'Oil (BOPD)':'{:,.0f}','Liquid (BLPD)':'{:,.0f}','Loss (BBL)':'{:,.0f}'}),
+            use_container_width=True, hide_index=True)
+    else:
+        st.info("No data in selected range.")
+
+    st.divider()
+
+    # ── PLATFORM WISE TREND ───────────────────────────────────────────────────
+    st.markdown("### Platform wise Oil Trend")
+    p_from, p_to = get_date_range("plat_trend", prod_min, prod_max,
+                                   default="3 Months")
+    pt = filter_df_by_dates(all_plat.copy(), 'date', p_from, p_to)
+
     if not pt.empty:
         pt['date'] = pd.to_datetime(pt['date']).dt.normalize()
+        st.caption(f"📅 {p_from.strftime('%d-%b-%Y')} → {p_to.strftime('%d-%b-%Y')} | {len(pt)} data points")
         fig2 = px.line(pt, x='date', y='oil', color='platform',
                        title='Oil by Platform', markers=True)
         fig2.update_layout(**CHART, height=380,
                            xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45))
         fig2.update_xaxes(**GRID); fig2.update_yaxes(**GRID)
         st.plotly_chart(fig2, use_container_width=True)
-
-    st.subheader("📋 Daily Summary")
-    s = trend.copy()
-    s['date'] = s['date'].dt.strftime('%d-%b-%Y')
-    s.columns = ['Date','Oil (BOPD)','Liquid (BLPD)','Loss (BBL)']
-    st.dataframe(s.sort_values('Date', ascending=False).style.format(
-        {'Oil (BOPD)':'{:,.0f}','Liquid (BLPD)':'{:,.0f}','Loss (BBL)':'{:,.0f}'}),
-        use_container_width=True, hide_index=True)
+    else:
+        st.info("No data in selected range.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 3 — ESP HEALTH
@@ -518,9 +640,8 @@ elif page == "ESP Health":
              'motor_current_a_amp','motor_current_b_amp','motor_current_c_amp',
              'pump_intake_temp_c','vibration_x','vibration_y']
     avail = [c for c in nc if c in wdf.columns]
-    rs    = (wdf.set_index('timestamp')[avail]
-             .resample('12h').mean().dropna(how='all').reset_index())
 
+    # Latest metrics
     st.subheader(f"Latest Reading — {sel}")
     c1,c2,c3,c4 = st.columns(4)
     c1.metric("🌡️ Motor Temp (°C)",    format_metric(latest.get('motor_temp_1_c')))
@@ -535,11 +656,69 @@ elif page == "ESP Health":
     c8.metric("📳 Vibration X",      format_metric(latest.get('vibration_x'), decimals=3))
 
     st.divider()
-    st.caption(
-        f"📊 12-hourly averages | Raw: {len(wdf):,} | Chart: {len(rs):,} | "
-        f"{wdf['timestamp'].min().strftime('%d-%b-%Y')} → "
-        f"{wdf['timestamp'].max().strftime('%d-%b-%Y')}")
 
+    # ── SHARED TIME SELECTOR — PILL STYLE ────────────────────────────────────
+    esp_ts_min = wdf['timestamp'].min().date()
+    esp_ts_max = wdf['timestamp'].max().date()
+
+    st.markdown("**📅 Chart Time Range**")
+
+    # Use session state to track active pill
+    if 'esp_pill' not in st.session_state:
+        st.session_state.esp_pill = "1 Month"
+
+    pill_cols = st.columns(len(TIME_OPTIONS))
+    for i, opt in enumerate(TIME_OPTIONS):
+        with pill_cols[i]:
+            active = st.session_state.esp_pill == opt
+            label  = f"**{opt}**" if active else opt
+            if st.button(opt, key=f"esp_pill_{opt}",
+                         use_container_width=True):
+                st.session_state.esp_pill = opt
+                st.rerun()
+
+    selected_pill = st.session_state.esp_pill
+
+    if selected_pill == "Custom":
+        col1, col2 = st.columns(2)
+        with col1:
+            esp_from = st.date_input("From", value=esp_ts_min,
+                min_value=esp_ts_min, max_value=esp_ts_max,
+                key="esp_from", format="DD/MM/YYYY")
+        with col2:
+            esp_to = st.date_input("To", value=esp_ts_max,
+                min_value=esp_ts_min, max_value=esp_ts_max,
+                key="esp_to", format="DD/MM/YYYY")
+    else:
+        esp_to = esp_ts_max
+        delta_map = {
+            "1 Day":    timedelta(days=1),
+            "5 Days":   timedelta(days=5),
+            "1 Month":  relativedelta(months=1),
+            "3 Months": relativedelta(months=3),
+            "6 Months": relativedelta(months=6),
+            "1 Year":   relativedelta(years=1),
+        }
+        esp_from = max(esp_ts_min, esp_to - delta_map[selected_pill])
+
+    # Filter and resample
+    wdf_filtered = wdf[
+        (wdf['timestamp'].dt.date >= esp_from) &
+        (wdf['timestamp'].dt.date <= esp_to)
+    ].copy()
+
+    st.caption(
+        f"📊 12-hourly averages | Raw: {len(wdf_filtered):,} pts | "
+        f"{esp_from.strftime('%d-%b-%Y')} → {esp_to.strftime('%d-%b-%Y')}")
+
+    if wdf_filtered.empty:
+        st.info("No ESP data in selected range.")
+        st.stop()
+
+    rs = (wdf_filtered.set_index('timestamp')[avail]
+          .resample('12h').mean().dropna(how='all').reset_index())
+
+    # Motor temp
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=rs['timestamp'], y=rs['motor_temp_1_c'],
         name='Motor Temp', line=dict(color='#e63946',width=2),
@@ -548,12 +727,13 @@ elif page == "ESP Health":
                   annotation_text="Warning 135°C")
     fig.add_hline(y=150, line_dash="dash", line_color="red",
                   annotation_text="Trip 150°C")
-    fig.update_layout(**CHART, title=f'Motor Temperature — {sel}', height=330,
+    fig.update_layout(**CHART, title=f'Motor Temperature — {sel}', height=320,
                       xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
                       yaxis_title='°C')
     fig.update_xaxes(**GRID); fig.update_yaxes(**GRID)
     st.plotly_chart(fig, use_container_width=True)
 
+    # Phase current
     st.subheader("⚡ Phase Current Balance")
     fig2 = go.Figure()
     for col,name,color in [
@@ -563,12 +743,13 @@ elif page == "ESP Health":
         fig2.add_trace(go.Scatter(x=rs['timestamp'], y=rs[col],
             name=name, line=dict(color=color),
             mode='lines+markers', marker=dict(size=4)))
-    fig2.update_layout(**CHART, title='3-Phase Current (12h avg)', height=310,
+    fig2.update_layout(**CHART, title='3-Phase Current (12h avg)', height=300,
                        xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
                        yaxis_title='Amps')
     fig2.update_xaxes(**GRID); fig2.update_yaxes(**GRID)
     st.plotly_chart(fig2, use_container_width=True)
 
+    # Pump pressure
     st.subheader("🔄 Pump Pressure")
     fig3 = go.Figure()
     fig3.add_trace(go.Scatter(x=rs['timestamp'],
@@ -577,12 +758,13 @@ elif page == "ESP Health":
     fig3.add_trace(go.Scatter(x=rs['timestamp'],
         y=rs['pump_discharge_pressure_psi'], name='Discharge (psi)',
         line=dict(color='#0077b6'), mode='lines+markers', marker=dict(size=4)))
-    fig3.update_layout(**CHART, title='Pump Pressure (12h avg)', height=310,
+    fig3.update_layout(**CHART, title='Pump Pressure (12h avg)', height=300,
                        xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
                        yaxis_title='psi')
     fig3.update_xaxes(**GRID); fig3.update_yaxes(**GRID)
     st.plotly_chart(fig3, use_container_width=True)
 
+    # VFD
     st.subheader("📡 VFD Frequency")
     fig4 = go.Figure()
     fig4.add_trace(go.Scatter(x=rs['timestamp'],
@@ -592,12 +774,13 @@ elif page == "ESP Health":
                    annotation_text="Max 60 Hz")
     fig4.add_hline(y=40, line_dash="dash", line_color="orange",
                    annotation_text="Min 40 Hz")
-    fig4.update_layout(**CHART, title='VFD Frequency (12h avg)', height=290,
+    fig4.update_layout(**CHART, title='VFD Frequency (12h avg)', height=280,
                        xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
                        yaxis_title='Hz')
     fig4.update_xaxes(**GRID); fig4.update_yaxes(**GRID)
     st.plotly_chart(fig4, use_container_width=True)
 
+    # Motor load
     st.subheader("📊 Motor Load")
     fig5 = go.Figure()
     fig5.add_trace(go.Scatter(x=rs['timestamp'], y=rs['motor_load_pct'],
@@ -608,7 +791,7 @@ elif page == "ESP Health":
                    annotation_text="Overload 90%")
     fig5.add_hline(y=30, line_dash="dash", line_color="orange",
                    annotation_text="Underload 30%")
-    fig5.update_layout(**CHART, title='Motor Load (12h avg)', height=290,
+    fig5.update_layout(**CHART, title='Motor Load (12h avg)', height=280,
                        xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
                        yaxis_title='%')
     fig5.update_xaxes(**GRID); fig5.update_yaxes(**GRID)
@@ -639,24 +822,36 @@ elif page == "Water Injection":
     st.dataframe(wi[[c for c in dcols if c in wi.columns]],
                  use_container_width=True, hide_index=True)
 
-    st.subheader("📈 Historical Injection Trend")
+    st.divider()
+    st.markdown("### 📈 Historical Injection Trend")
+
+    wi_min, wi_max = get_db_date_range('water_injection')
+    wi_from, wi_to = get_date_range("wi_trend", wi_min, wi_max,
+                                     default="3 Months")
+
     conn = get_connection()
-    wr = pd.read_sql(
-        "SELECT MIN(date) as mn, MAX(date) as mx FROM water_injection",
-        conn).iloc[0]
+    wt = pd.read_sql("""SELECT date,
+        SUM(flow_rate_bpd) as total_bpd,
+        SUM(cumulative_flow_bbl) as cumulative
+        FROM water_injection
+        WHERE date >= ? AND date <= ?
+        AND date >= '2000-01-01'
+        GROUP BY date ORDER BY date""",
+        conn, params=(str(wi_from), str(wi_to)))
     conn.close()
-    wmin  = pd.to_datetime(wr['mn']); wmax = pd.to_datetime(wr['mx'])
-    wdays = max(1, (wmax - wmin).days + 1)
-    days  = st.slider("Days to show", 1, wdays, min(90, wdays))
-    wt    = load_water_injection_trend(days)
+
     if not wt.empty:
         wt['date'] = pd.to_datetime(wt['date']).dt.normalize()
+        st.caption(f"📅 {wi_from.strftime('%d-%b-%Y')} → {wi_to.strftime('%d-%b-%Y')} | {len(wt)} data points")
         fig = px.line(wt, x='date', y='total_bpd',
                       title='Daily Water Injection Rate (BPD)', markers=True)
-        fig.update_layout(**CHART, height=340,
-                          xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
+        fig.update_layout(**CHART, height=360,
+                          xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45),
+                          yaxis_title='BPD')
         fig.update_xaxes(**GRID); fig.update_yaxes(**GRID)
         st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No data in selected range.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 5 — PRESSURE ANALYSIS
@@ -664,73 +859,98 @@ elif page == "Water Injection":
 elif page == "Pressure Analysis":
     st.title("📊 Pipeline Pressure Analysis")
 
-    conn = get_connection()
-    pr = pd.read_sql(
-        "SELECT MIN(timestamp) as mn, MAX(timestamp) as mx FROM pressure_data",
-        conn).iloc[0]
-    conn.close()
-    pmn   = pd.to_datetime(pr['mn']); pmx = pd.to_datetime(pr['mx'])
-    pdays = max(1, (pmx - pmn).days + 1)
-    st.caption(f"📅 {pmn.strftime('%d-%b-%Y')} to {pmx.strftime('%d-%b-%Y')}")
+    pr_min, pr_max = get_db_date_range('pressure_data', date_col='timestamp')
+    all_pdf = load_all_pressure()
 
-    days = st.slider("Time range (days)", 7, pdays, min(30, pdays))
-    pdf  = load_pressure_trend(days)
-    if pdf.empty:
+    if all_pdf.empty:
         st.warning("No pressure data.")
         st.stop()
 
-    pdf['timestamp'] = pd.to_datetime(pdf['timestamp'])
-    for col in pdf.select_dtypes(include='number').columns:
-        pdf[col] = pdf[col].where(pdf[col] <= 200, other=None)
+    all_pdf['timestamp'] = pd.to_datetime(all_pdf['timestamp'])
 
-    st.subheader("🔵 Route 1 — R10A to Heera")
+    # ── ROUTE 1 ───────────────────────────────────────────────────────────────
+    st.markdown("### 🔵 Route 1 — R10A to Heera")
     st.caption("R9A + R13A + R10A → Heera via 10\" 45km")
-    fig1 = go.Figure()
-    for col,name,color in [
-        ('r7a_r10a_lp','R7A L/P','#00b4d8'),
-        ('r10a_r9a_rp','R9A→R10A R/P','#90e0ef'),
-        ('r10a_hra_lp','R10A→HRA L/P','#0077b6'),
-        ('r9a_r10a_lp','R9A L/P','#48cae4'),
-        ('r13a_r10a_lp','R13A L/P','#ade8f4')]:
-        fig1.add_trace(go.Scatter(x=pdf['timestamp'], y=pdf[col],
-                                  name=name, line=dict(color=color)))
-    fig1.update_layout(**CHART, height=390, yaxis_title='KSC',
-                       xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
-    fig1.update_xaxes(**GRID); fig1.update_yaxes(**GRID)
-    st.plotly_chart(fig1, use_container_width=True)
+    r1_from, r1_to = get_date_range("route1", pr_min, pr_max, default="1 Month")
+    r1_df = all_pdf[
+        (all_pdf['timestamp'].dt.date >= r1_from) &
+        (all_pdf['timestamp'].dt.date <= r1_to)].copy()
 
-    st.subheader("🟠 Route 2 — R12A to Heera")
+    if not r1_df.empty:
+        st.caption(f"📅 {r1_from.strftime('%d-%b-%Y')} → {r1_to.strftime('%d-%b-%Y')}")
+        fig1 = go.Figure()
+        for col,name,color in [
+            ('r7a_r10a_lp','R7A L/P','#00b4d8'),
+            ('r10a_r9a_rp','R9A→R10A R/P','#90e0ef'),
+            ('r10a_hra_lp','R10A→HRA L/P','#0077b6'),
+            ('r9a_r10a_lp','R9A L/P','#48cae4'),
+            ('r13a_r10a_lp','R13A L/P','#ade8f4')]:
+            fig1.add_trace(go.Scatter(x=r1_df['timestamp'], y=r1_df[col],
+                                      name=name, line=dict(color=color)))
+        fig1.update_layout(**CHART, height=380, yaxis_title='KSC',
+                           xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
+        fig1.update_xaxes(**GRID); fig1.update_yaxes(**GRID)
+        st.plotly_chart(fig1, use_container_width=True)
+    else:
+        st.info("No data in selected range.")
+
+    st.divider()
+
+    # ── ROUTE 2 ───────────────────────────────────────────────────────────────
+    st.markdown("### 🟠 Route 2 — R12A to Heera")
     st.caption("R7A + R12B + R12A → Heera via 12\" 41km + 10\" 41km")
-    fig2 = go.Figure()
-    for col,name,color in [
-        ('r10a_r12a_lp','R10A→R12A L/P','#f4a261'),
-        ('r12a_r10a_rp','R12A R/P from R10A','#e76f51'),
-        ('r12a_r12b_rp','R12A R/P from R12B','#e9c46a'),
-        ('r12a_hra_lp','R12A→HRA L/P','#264653')]:
-        fig2.add_trace(go.Scatter(x=pdf['timestamp'], y=pdf[col],
-                                  name=name, line=dict(color=color)))
-    fig2.update_layout(**CHART, height=390, yaxis_title='KSC',
-                       xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
-    fig2.update_xaxes(**GRID); fig2.update_yaxes(**GRID)
-    st.plotly_chart(fig2, use_container_width=True)
+    r2_from, r2_to = get_date_range("route2", pr_min, pr_max, default="1 Month")
+    r2_df = all_pdf[
+        (all_pdf['timestamp'].dt.date >= r2_from) &
+        (all_pdf['timestamp'].dt.date <= r2_to)].copy()
 
-    st.subheader("⚠️ Pipeline ΔP Analysis")
+    if not r2_df.empty:
+        st.caption(f"📅 {r2_from.strftime('%d-%b-%Y')} → {r2_to.strftime('%d-%b-%Y')}")
+        fig2 = go.Figure()
+        for col,name,color in [
+            ('r10a_r12a_lp','R10A→R12A L/P','#f4a261'),
+            ('r12a_r10a_rp','R12A R/P from R10A','#e76f51'),
+            ('r12a_r12b_rp','R12A R/P from R12B','#e9c46a'),
+            ('r12a_hra_lp','R12A→HRA L/P','#264653')]:
+            fig2.add_trace(go.Scatter(x=r2_df['timestamp'], y=r2_df[col],
+                                      name=name, line=dict(color=color)))
+        fig2.update_layout(**CHART, height=380, yaxis_title='KSC',
+                           xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
+        fig2.update_xaxes(**GRID); fig2.update_yaxes(**GRID)
+        st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.info("No data in selected range.")
+
+    st.divider()
+
+    # ── ΔP ANALYSIS ───────────────────────────────────────────────────────────
+    st.markdown("### ⚠️ Pipeline ΔP Analysis")
     st.caption("ΔP = L/P - R/P. Rising ΔP = restriction building up")
-    pdf['r7a_dp']  = pdf['r7a_r10a_lp']  - pdf['r10a_r7a_rp']
-    pdf['r9a_dp']  = pdf['r9a_r10a_lp']  - pdf['r10a_r9a_rp']
-    pdf['r13a_dp'] = pdf['r13a_r10a_lp'] - pdf['r10a_r13a_rp']
-    fig3 = go.Figure()
-    for col,name,color in [
-        ('r7a_dp','R7A ΔP','#00b4d8'),
-        ('r9a_dp','R9A ΔP','#f4a261'),
-        ('r13a_dp','R13A ΔP','#2a9d8f')]:
-        fig3.add_trace(go.Scatter(x=pdf['timestamp'], y=pdf[col],
-                                  name=name, line=dict(color=color)))
-    fig3.update_layout(**CHART, title='ΔP (L/P − R/P)', height=340,
-                       yaxis_title='ΔP (KSC)',
-                       xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
-    fig3.update_xaxes(**GRID); fig3.update_yaxes(**GRID)
-    st.plotly_chart(fig3, use_container_width=True)
+    dp_from, dp_to = get_date_range("dp", pr_min, pr_max, default="1 Month")
+    dp_df = all_pdf[
+        (all_pdf['timestamp'].dt.date >= dp_from) &
+        (all_pdf['timestamp'].dt.date <= dp_to)].copy()
+
+    if not dp_df.empty:
+        dp_df['r7a_dp']  = dp_df['r7a_r10a_lp']  - dp_df['r10a_r7a_rp']
+        dp_df['r9a_dp']  = dp_df['r9a_r10a_lp']  - dp_df['r10a_r9a_rp']
+        dp_df['r13a_dp'] = dp_df['r13a_r10a_lp'] - dp_df['r10a_r13a_rp']
+
+        st.caption(f"📅 {dp_from.strftime('%d-%b-%Y')} → {dp_to.strftime('%d-%b-%Y')}")
+        fig3 = go.Figure()
+        for col,name,color in [
+            ('r7a_dp','R7A ΔP','#00b4d8'),
+            ('r9a_dp','R9A ΔP','#f4a261'),
+            ('r13a_dp','R13A ΔP','#2a9d8f')]:
+            fig3.add_trace(go.Scatter(x=dp_df['timestamp'], y=dp_df[col],
+                                      name=name, line=dict(color=color)))
+        fig3.update_layout(**CHART, title='ΔP (L/P − R/P)', height=340,
+                           yaxis_title='ΔP (KSC)',
+                           xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
+        fig3.update_xaxes(**GRID); fig3.update_yaxes(**GRID)
+        st.plotly_chart(fig3, use_container_width=True)
+    else:
+        st.info("No data in selected range.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 6 — EARLY WARNING
@@ -796,11 +1016,11 @@ elif page == "Early Warning":
                         'Parameter':'VFD Frequency','Value':f"{freq:.1f} Hz",
                         'Threshold':'<40 Hz','Action':'Check inflow'})
 
-    prf = load_pressure_trend(days=3)
+    # Pressure checks use last 3 days
+    prf = load_all_pressure()
     if not prf.empty:
         prf['timestamp'] = pd.to_datetime(prf['timestamp'])
-        for col in prf.select_dtypes(include='number').columns:
-            prf[col] = prf[col].where(prf[col] <= 200, other=None)
+        prf = prf[prf['timestamp'] >= prf['timestamp'].max() - pd.Timedelta(days=3)]
         for col,label in [
             ('r7a_r10a_lp','R7A Launcher'),
             ('r9a_r10a_lp','R9A Launcher'),

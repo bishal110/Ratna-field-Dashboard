@@ -583,16 +583,18 @@ def process_single_file(file_info, conn):
                 total_inserted += ins
                 total_skipped  += skip
 
-        # Water injection sheets
+        # Water injection — ONLY process Base sheet
+        # Water Injection_Sheet (daily summary) is ignored
+        # Water Injection Sheet (Base) has full historical data with dates
         elif ('water' in sheet_lower or
               'injection' in sheet_lower or
               'wi' in sheet_lower):
             if 'base' in sheet_lower:
                 ins, skip = ingest_water_injection_base(df, conn)
+                total_inserted += ins
+                total_skipped  += skip
             else:
-                ins, skip = ingest_water_injection(df, date, conn)
-            total_inserted += ins
-            total_skipped  += skip
+                print(f"      ⏭️  Skipping sheet '{sheet}' — only Base sheet ingested")
 
     return total_inserted, total_skipped
 
