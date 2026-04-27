@@ -47,7 +47,6 @@ st.markdown(f"""
 [data-testid="stSidebar"]        {{ display: none !important; }}
 [data-testid="collapsedControl"] {{ display: none !important; }}
 
-/* NAVBAR */
 .navbar {{
     position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
     background: rgba(0,8,24,0.92); backdrop-filter: blur(14px);
@@ -102,7 +101,6 @@ st.markdown(f"""
     border: none !important; cursor: pointer !important;
 }}
 
-/* METRIC CARDS */
 [data-testid="stMetric"] {{
     background: rgba(255,255,255,0.05) !important;
     border: 1px solid rgba(0,180,216,0.22) !important;
@@ -114,7 +112,6 @@ st.markdown(f"""
     background: rgba(0,180,216,0.09) !important;
     border-color: rgba(0,180,216,0.45) !important;
     transform: translateY(-2px);
-    box-shadow: 0 6px 24px rgba(0,180,216,0.12);
 }}
 [data-testid="stMetricLabel"] {{
     color: #90e0ef !important;
@@ -139,14 +136,11 @@ h3 {{ color:#caf0f8 !important; font-weight:500 !important; }}
 }}
 
 hr {{ border-color: rgba(0,180,216,0.18) !important; }}
-
 ::-webkit-scrollbar {{ width: 4px; }}
 ::-webkit-scrollbar-track {{ background: transparent; }}
 ::-webkit-scrollbar-thumb {{ background: rgba(0,180,216,0.35); border-radius:4px; }}
-
 .stCaption {{ color: rgba(144,224,239,0.65) !important; }}
 
-/* STYLED SELECTBOX — dark glass theme */
 [data-testid="stSelectbox"] > div > div {{
     background: rgba(0,8,24,0.85) !important;
     border: 1px solid rgba(0,180,216,0.3) !important;
@@ -156,17 +150,11 @@ hr {{ border-color: rgba(0,180,216,0.18) !important; }}
     font-family: 'Inter', sans-serif !important;
     font-size: 12px !important;
 }}
-[data-testid="stSelectbox"] > div > div:hover {{
-    border-color: rgba(0,180,216,0.6) !important;
-    background: rgba(0,20,50,0.90) !important;
-}}
 [data-testid="stSelectbox"] label {{
     color: rgba(144,224,239,0.7) !important;
     font-family: 'Inter', sans-serif !important;
     font-size: 11px !important;
 }}
-
-/* STYLED DATE INPUT */
 [data-testid="stDateInput"] > div > div > input {{
     background: rgba(0,8,24,0.85) !important;
     border: 1px solid rgba(0,180,216,0.3) !important;
@@ -181,30 +169,6 @@ hr {{ border-color: rgba(0,180,216,0.18) !important; }}
     font-size: 11px !important;
 }}
 
-/* ESP PILL BUTTONS */
-.pill-container {{
-    display: flex; gap: 6px; flex-wrap: wrap;
-    margin-bottom: 16px;
-}}
-.pill {{
-    font-family: 'Inter', sans-serif;
-    font-size: 12px; font-weight: 500;
-    color: rgba(144,224,239,0.75);
-    padding: 5px 14px; border-radius: 20px;
-    border: 1px solid rgba(0,180,216,0.25);
-    background: rgba(0,8,24,0.7);
-    backdrop-filter: blur(8px);
-    cursor: pointer; white-space: nowrap;
-    transition: all 0.2s ease;
-}}
-.pill.active {{
-    color: #fff;
-    background: rgba(0,180,216,0.25);
-    border-color: rgba(0,180,216,0.5);
-    box-shadow: 0 0 12px rgba(0,180,216,0.2);
-}}
-
-/* LIGHT MODE */
 @media (prefers-color-scheme: light) {{
     .stApp {{
         background-image: linear-gradient(rgba(255,255,255,0.68),rgba(220,240,255,0.72)), {bg_url};
@@ -255,9 +219,9 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="nav-btn-row">', unsafe_allow_html=True)
-cols = st.columns(len(PAGES))
+nav_cols = st.columns(len(PAGES))
 for i, (icon, name) in enumerate(PAGES):
-    with cols[i]:
+    with nav_cols[i]:
         if st.button(f"{icon} {name}", key=f"nav_{name}",
                      use_container_width=True):
             st.session_state.page = name
@@ -275,9 +239,7 @@ VALID_PLATFORMS = ['R-7A', 'R-9A', 'R-10A', 'R-12A', 'R-12B', 'R-13A']
 CHART = dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
              font_color='white')
 GRID  = dict(showgrid=True, gridcolor='rgba(255,255,255,0.08)')
-
-TIME_OPTIONS = ["1 Day", "5 Days", "1 Month", "3 Months",
-                "6 Months", "1 Year", "Custom"]
+TIME_OPTIONS = ["1 Day","5 Days","1 Month","3 Months","6 Months","1 Year","Custom"]
 
 def format_metric(value, decimals=1):
     try:
@@ -287,47 +249,46 @@ def format_metric(value, decimals=1):
     except:
         return "N/A"
 
-def get_date_range(key, db_min, db_max, default="3 Months"):
-    """
-    Renders a right-aligned styled dropdown for time range selection.
-    When Custom is selected, shows from/to date pickers with calendar.
-    Returns (date_from, date_to) as date objects.
+def pct_change(current, previous, invert=False):
+    if previous is None or previous == 0: return ""
+    chg = ((current - previous) / previous) * 100
+    if chg == 0:
+        return '<span style="color:#90e0ef;font-size:13px;font-weight:500;">— 0.0%</span>'
+    going_up = chg > 0
+    is_good  = going_up if not invert else not going_up
+    color    = "#2a9d8f" if is_good else "#e63946"
+    arrow    = "▲" if going_up else "▼"
+    sign     = "+" if going_up else ""
+    return f'<span style="color:{color};font-size:13px;font-weight:500;">{arrow} {sign}{chg:.1f}%</span>'
 
-    key       — unique key for session state
-    db_min    — earliest date in database (date object)
-    db_max    — latest date in database (date object)
-    default   — default selection from TIME_OPTIONS
-    """
-    # Right-align the selector by using columns
+def kpi_card(label, value, subtitle="", change_html=""):
+    sub_html = f'<span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.35);">{subtitle}</span>' if subtitle else ""
+    return f"""<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(0,180,216,0.22);
+        border-radius:12px;padding:18px 20px;backdrop-filter:blur(10px);
+        height:115px;display:flex;flex-direction:column;justify-content:space-between;">
+        <div style="font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+            color:rgba(144,224,239,0.6);letter-spacing:1.5px;text-transform:uppercase;">{label}</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:2rem;
+            font-weight:700;color:#ffffff;line-height:1;">{value}</div>
+        <div style="display:flex;align-items:center;gap:8px;">{change_html}{sub_html}</div>
+    </div>"""
+
+def get_date_range(key, db_min, db_max, default="3 Months"):
     _, right = st.columns([3, 1])
     with right:
-        selected = st.selectbox(
-            "📅 Range",
-            TIME_OPTIONS,
-            index=TIME_OPTIONS.index(default),
-            key=f"range_{key}"
-        )
-
+        selected = st.selectbox("📅 Range", TIME_OPTIONS,
+                                index=TIME_OPTIONS.index(default),
+                                key=f"range_{key}")
     if selected == "Custom":
         col1, col2 = st.columns(2)
         with col1:
-            date_from = st.date_input(
-                "From date",
-                value=db_min,
-                min_value=db_min,
-                max_value=db_max,
-                key=f"from_{key}",
-                format="DD/MM/YYYY"
-            )
+            date_from = st.date_input("From date", value=db_min,
+                min_value=db_min, max_value=db_max,
+                key=f"from_{key}", format="DD/MM/YYYY")
         with col2:
-            date_to = st.date_input(
-                "To date",
-                value=db_max,
-                min_value=db_min,
-                max_value=db_max,
-                key=f"to_{key}",
-                format="DD/MM/YYYY"
-            )
+            date_to = st.date_input("To date", value=db_max,
+                min_value=db_min, max_value=db_max,
+                key=f"to_{key}", format="DD/MM/YYYY")
     else:
         date_to = db_max
         delta_map = {
@@ -339,17 +300,21 @@ def get_date_range(key, db_min, db_max, default="3 Months"):
             "1 Year":   relativedelta(years=1),
         }
         date_from = max(db_min, date_to - delta_map[selected])
-
     return date_from, date_to
 
 def filter_df_by_dates(df, date_col, date_from, date_to):
-    """Filter dataframe between two date objects"""
     if df.empty: return df
     df[date_col] = pd.to_datetime(df[date_col])
-    return df[
-        (df[date_col].dt.date >= date_from) &
-        (df[date_col].dt.date <= date_to)
-    ]
+    return df[(df[date_col].dt.date >= date_from) &
+              (df[date_col].dt.date <= date_to)]
+
+def get_db_date_range(table, date_col='date'):
+    conn = get_connection()
+    df = pd.read_sql(
+        f"SELECT MIN({date_col}) as mn, MAX({date_col}) as mx "
+        f"FROM {table} WHERE {date_col} >= '2000-01-01'", conn).iloc[0]
+    conn.close()
+    return pd.to_datetime(df['mn']).date(), pd.to_datetime(df['mx']).date()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DATA LOADING
@@ -393,10 +358,8 @@ def load_latest_pressure():
 
 def load_all_pressure():
     conn = get_connection()
-    df = pd.read_sql(
-        "SELECT * FROM pressure_data ORDER BY timestamp ASC", conn)
+    df = pd.read_sql("SELECT * FROM pressure_data ORDER BY timestamp ASC", conn)
     conn.close()
-    # Clean outliers
     for col in df.select_dtypes(include='number').columns:
         df[col] = df[col].where(df[col] <= 200, other=None)
     return df
@@ -421,31 +384,12 @@ def load_water_injection():
     conn.close()
     return df
 
-def load_all_water_injection_trend():
-    conn = get_connection()
-    df = pd.read_sql("""SELECT date,
-        SUM(flow_rate_bpd) as total_bpd,
-        SUM(cumulative_flow_bbl) as cumulative
-        FROM water_injection
-        WHERE date >= '2000-01-01'
-        GROUP BY date ORDER BY date""", conn)
-    conn.close()
-    return df
-
-def get_db_date_range(table, date_col='date'):
-    """Get min/max dates from a table, filtering bad dates"""
-    conn = get_connection()
-    df = pd.read_sql(
-        f"SELECT MIN({date_col}) as mn, MAX({date_col}) as mx FROM {table} WHERE {date_col} >= '2000-01-01'",
-        conn).iloc[0]
-    conn.close()
-    return pd.to_datetime(df['mn']).date(), pd.to_datetime(df['mx']).date()
-
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — FIELD OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 if page == "Field Overview":
     st.title("🛢️ Oil Field — Production Overview")
+
     prod_df     = load_latest_production()
     pressure_df = load_latest_pressure()
 
@@ -455,181 +399,155 @@ if page == "Field Overview":
 
     st.caption(f"📅 Data as of: {prod_df['date'].max()}")
 
-    # ── LOAD PREVIOUS DATE FOR COMPARISON ─────────────────────────────────────
+    # ── PREVIOUS DATE FOR COMPARISON ─────────────────────────────────────────
     conn = get_connection()
     all_dates = pd.read_sql(
-        "SELECT DISTINCT date FROM oil_production ORDER BY date DESC LIMIT 2",
-        conn)
+        "SELECT DISTINCT date FROM oil_production ORDER BY date DESC LIMIT 2", conn)
     conn.close()
 
     prev_df = pd.DataFrame()
     if len(all_dates) >= 2:
         prev_date = all_dates['date'].iloc[1]
         conn = get_connection()
-        prev_df = pd.read_sql(f"""
-            SELECT * FROM oil_production
-            WHERE date = '{prev_date}'
-        """, conn)
+        prev_raw = pd.read_sql(
+            f"SELECT * FROM oil_production WHERE date='{prev_date}'", conn)
         conn.close()
-        prev_df = prev_df[prev_df['platform'].isin(VALID_PLATFORMS)]
+        prev_df = prev_raw[prev_raw['platform'].isin(VALID_PLATFORMS)]
         prev_df = prev_df[prev_df['well_name'].str.contains('#', na=False)]
 
-    # ── CALCULATE METRICS ─────────────────────────────────────────────────────
-    total_oil     = prod_df['oil_rate_bpd'].sum()
+    # ── CURRENT METRICS ───────────────────────────────────────────────────────
     total_liquid  = prod_df['liquid_rate_bpd'].sum()
+    total_oil     = prod_df['oil_rate_bpd'].sum()
     total_loss    = prod_df['production_loss_bbl'].sum()
-    net_oil       = prod_df['net_oil_bbl'].max() if 'net_oil_bbl' in prod_df.columns else None
+    net_oil       = prod_df['net_oil_bbl'].max() \
+                    if 'net_oil_bbl' in prod_df.columns else None
     wells_flowing = len(prod_df[prod_df['well_status'].str.contains(
         'Flowing', na=False, case=False)])
     wells_total   = len(prod_df)
     wells_down    = len(prod_df[prod_df['well_status'].str.contains(
         'Non|Workover|Failure', na=False, case=False)])
 
-    prev_oil     = prev_df['oil_rate_bpd'].sum()    if not prev_df.empty else None
-    prev_liquid  = prev_df['liquid_rate_bpd'].sum() if not prev_df.empty else None
+    # ── PREVIOUS METRICS ──────────────────────────────────────────────────────
+    prev_liquid  = prev_df['liquid_rate_bpd'].sum()    if not prev_df.empty else None
+    prev_oil     = prev_df['oil_rate_bpd'].sum()       if not prev_df.empty else None
     prev_loss    = prev_df['production_loss_bbl'].sum() if not prev_df.empty else None
-    prev_net_oil = prev_df['net_oil_bbl'].max() \
+    prev_net     = prev_df['net_oil_bbl'].max() \
                    if not prev_df.empty and 'net_oil_bbl' in prev_df.columns else None
-    prev_date_str = all_dates['date'].iloc[1] if len(all_dates) >= 2 else None
+    vs_text      = all_dates['date'].iloc[1] if len(all_dates) >= 2 else ""
 
-    def pct_change(current, previous, invert=False):
-        """
-        Calculate % change and return styled arrow HTML.
-        invert=True means increase is bad (e.g. production loss)
-        """
-        if previous is None or previous == 0:
-            return ""
-        chg = ((current - previous) / previous) * 100
-        if chg == 0:
-            return '<span style="color:#90e0ef;font-size:13px;font-weight:500;">— 0.0%</span>'
-        going_up = chg > 0
-        is_good  = going_up if not invert else not going_up
-        color    = "#2a9d8f" if is_good else "#e63946"
-        arrow    = "▲" if going_up else "▼"
-        sign     = "+" if going_up else ""
-        return f'<span style="color:{color};font-size:13px;font-weight:500;">{arrow} {sign}{chg:.1f}%</span>'
+    # ── KPI CARDS ─────────────────────────────────────────────────────────────
+    k1,k2,k3,k4,k5,k6 = st.columns(6)
 
-    def kpi_card(label, value, subtitle="", change_html=""):
-        subtitle_html = f'<span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.35);">{subtitle}</span>' \
-                        if subtitle else ""
-        return f"""
-        <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(0,180,216,0.22);
-            border-radius:12px;padding:18px 20px;backdrop-filter:blur(10px);
-            height:115px;display:flex;flex-direction:column;justify-content:space-between;">
-            <div style="font-family:Inter,sans-serif;font-size:10px;font-weight:600;
-                color:rgba(144,224,239,0.6);letter-spacing:1.5px;
-                text-transform:uppercase;">{label}</div>
-            <div style="font-family:Rajdhani,sans-serif;font-size:2rem;
-                font-weight:700;color:#ffffff;line-height:1;">{value}</div>
-            <div style="display:flex;align-items:center;gap:8px;">
-                {change_html}{subtitle_html}
-            </div>
-        </div>
-        """
-
-    vs_text = f"vs {prev_date_str}" if prev_date_str else ""
-
-    # ── RENDER KPI CARDS ──────────────────────────────────────────────────────
-    # Order: Total Liquid | Total Oil | Net Oil | Production Loss | Wells Flowing | Wells Down
-    c1,c2,c3,c4,c5,c6 = st.columns(6)
-
-    with c1:
+    with k1:
         st.markdown(kpi_card(
-            "Total Liquid (BLPD)",
-            f"{total_liquid:,.0f}",
-            subtitle=vs_text,
+            "Total Liquid (BLPD)", f"{total_liquid:,.0f}",
+            subtitle=f"vs {vs_text}",
             change_html=pct_change(total_liquid, prev_liquid)
         ), unsafe_allow_html=True)
 
-    with c2:
+    with k2:
         st.markdown(kpi_card(
-            "Total Oil (BOPD)",
-            f"{total_oil:,.0f}",
-            subtitle=vs_text,
+            "Total Oil (BOPD)", f"{total_oil:,.0f}",
+            subtitle=f"vs {vs_text}",
             change_html=pct_change(total_oil, prev_oil)
         ), unsafe_allow_html=True)
 
-    with c3:
+    with k3:
         net_display = f"{net_oil:,.0f}" if net_oil else "N/A"
         st.markdown(kpi_card(
-            "Net Oil — DPR (BBL)",
-            net_display,
-            subtitle=vs_text,
-            change_html=pct_change(net_oil, prev_net_oil) if net_oil else ""
+            "Net Oil — DPR (BBL)", net_display,
+            subtitle=f"vs {vs_text}",
+            change_html=pct_change(net_oil, prev_net) if net_oil else ""
         ), unsafe_allow_html=True)
 
-    with c4:
-        # Loss — invert=True means increase is bad
+    with k4:
+        loss_html = ""
+        if prev_loss is not None:
+            if prev_loss == 0 and total_loss > 0:
+                loss_html = '<span style="color:#e63946;font-size:13px;font-weight:500;">▲ New loss</span>'
+            else:
+                loss_html = pct_change(total_loss, prev_loss, invert=True)
         st.markdown(kpi_card(
-            "Production Loss (BBL)",
-            f"{total_loss:,.0f}",
-            subtitle=vs_text,
-            change_html=pct_change(total_loss, prev_loss, invert=True)
+            "Production Loss (BBL)", f"{total_loss:,.0f}",
+            subtitle=f"vs {vs_text}",
+            change_html=loss_html
         ), unsafe_allow_html=True)
 
-    with c5:
+    with k5:
         st.markdown(kpi_card(
-            "Wells Flowing",
-            f"{wells_flowing} / {wells_total}",
-            subtitle="",
-            change_html='<span style="font-family:Inter,sans-serif;font-size:10px;'
-                        'color:rgba(144,224,239,0.4);">active producers</span>'
+            "Wells Flowing", f"{wells_flowing} / {wells_total}",
+            change_html='<span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.4);">active producers</span>'
         ), unsafe_allow_html=True)
 
-    with c6:
-        wells_down_html = \
-            f'<span style="color:#e63946;font-size:13px;font-weight:500;">⚠️ {wells_down} offline</span>' \
-            if wells_down > 0 else \
-            f'<span style="color:#2a9d8f;font-size:13px;font-weight:500;">✅ All running</span>'
+    with k6:
+        wd_html = f'<span style="color:#e63946;font-size:13px;font-weight:500;">⚠️ {wells_down} offline</span>' \
+                  if wells_down > 0 else \
+                  '<span style="color:#2a9d8f;font-size:13px;font-weight:500;">✅ All running</span>'
         st.markdown(kpi_card(
-            "Wells Down",
-            f"{wells_down}",
-            subtitle="",
-            change_html=wells_down_html
+            "Wells Down", f"{wells_down}",
+            change_html=wd_html
         ), unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:16px'></div>", unsafe_allow_html=True)
     st.divider()
-    chart_col1, chart_col2 = st.columns(2)
-    with chart_col1:
-        st.subheader("🛢️ Oil Contribution by Platform")
-        fig = px.pie(plat, values='Oil_BOPD', names='platform',
-                     color_discrete_sequence=px.colors.sequential.Blues_r)
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-        fig.update_layout(**CHART, showlegend=True, height=340)
-        st.plotly_chart(fig, use_container_width=True)
 
-    with chart_col2:
-        st.subheader("⚡ Well Status Distribution")
-        sc = prod_df['well_status'].fillna('Unknown').value_counts().reset_index()
-        sc.columns = ['Status','Count']
-        fig2 = px.bar(sc, x='Status', y='Count', color='Status',
-            color_discrete_map={
-                'Flowing':'#2a9d8f','Non-Flowing':'#e63946',
-                'Intermittent':'#f4a261','Self Flowing':'#457b9d',
-                'Workover':'#e9c46a','ESP Downhole failure':'#c77dff',
-                'Non-FLOWING (CD ESP)':'#e63946','Unknown':'#6c757d'})
-        fig2.update_layout(**CHART, showlegend=False, height=340)
-        st.plotly_chart(fig2, use_container_width=True)
-        color_discrete_sequence=px.colors.sequential.Blues_r
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-        fig.update_layout(**CHART, showlegend=True, height=340)
-        st.plotly_chart(fig, use_container_width=True)
+    # ── PLATFORM SUMMARY ──────────────────────────────────────────────────────
+    st.subheader("📊 Platform Summary")
 
-    with c2:
-        st.subheader("⚡ Well Status Distribution")
-        sc = prod_df['well_status'].fillna('Unknown').value_counts().reset_index()
-        sc.columns = ['Status','Count']
-        fig2 = px.bar(sc, x='Status', y='Count', color='Status',
-            color_discrete_map={
-                'Flowing':'#2a9d8f','Non-Flowing':'#e63946',
-                'Intermittent':'#f4a261','Self Flowing':'#457b9d',
-                'Workover':'#e9c46a','ESP Downhole failure':'#c77dff',
-                'Non-FLOWING (CD ESP)':'#e63946','Unknown':'#6c757d'})
-        fig2.update_layout(**CHART, showlegend=False, height=340)
-        st.plotly_chart(fig2, use_container_width=True)
+    platform_summary = prod_df.groupby('platform').agg(
+        Oil_BOPD=('oil_rate_bpd','sum'),
+        Liquid_BLPD=('liquid_rate_bpd','sum'),
+        Loss_BBL=('production_loss_bbl','sum'),
+        Wells_Total=('well_name','count'),
+        Wells_Flowing=('well_status',
+            lambda x: x.str.contains('Flowing',na=False,case=False).sum())
+    ).reset_index()
+
+    if not pressure_df.empty:
+        pr = pressure_df.iloc[0]
+        platform_summary['Line_Pressure_KSC'] = platform_summary['platform'].map({
+            'R-7A':  pr.get('r7a_r10a_lp'),
+            'R-10A': pr.get('r10a_mlp'),
+            'R-9A':  pr.get('r9a_r10a_lp'),
+            'R-12A': pr.get('r12a_hra_lp'),
+            'R-12B': pr.get('r12b_mlp'),
+            'R-13A': pr.get('r13a_r10a_lp'),
+        })
+
+    st.dataframe(platform_summary.style.format({
+        'Oil_BOPD':'{:,.0f}','Liquid_BLPD':'{:,.0f}',
+        'Loss_BBL':'{:,.0f}','Line_Pressure_KSC':'{:.1f}'}),
+        use_container_width=True, hide_index=True)
 
     st.divider()
+
+    # ── CHARTS ────────────────────────────────────────────────────────────────
+    chart_c1, chart_c2 = st.columns(2)
+
+    with chart_c1:
+        st.subheader("🛢️ Oil Contribution by Platform")
+        fig_pie = px.pie(platform_summary, values='Oil_BOPD', names='platform',
+                     color_discrete_sequence=px.colors.sequential.Blues_r)
+        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+        fig_pie.update_layout(**CHART, showlegend=True, height=340)
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with chart_c2:
+        st.subheader("⚡ Well Status Distribution")
+        sc = prod_df['well_status'].fillna('Unknown').value_counts().reset_index()
+        sc.columns = ['Status','Count']
+        fig_bar = px.bar(sc, x='Status', y='Count', color='Status',
+            color_discrete_map={
+                'Flowing':'#2a9d8f','Non-Flowing':'#e63946',
+                'Intermittent':'#f4a261','Self Flowing':'#457b9d',
+                'Workover':'#e9c46a','ESP Downhole failure':'#c77dff',
+                'Non-FLOWING (CD ESP)':'#e63946','Unknown':'#6c757d'})
+        fig_bar.update_layout(**CHART, showlegend=False, height=340)
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    st.divider()
+
+    # ── WELL LEVEL DETAIL ─────────────────────────────────────────────────────
     st.subheader("🔍 Well Level Detail")
     pf = st.selectbox("Filter by Platform", ['All'] + PLATFORMS)
     fdf = prod_df if pf == 'All' else prod_df[prod_df['platform'] == pf]
@@ -663,7 +581,6 @@ elif page == "Production Trends":
         st.warning("No data available.")
         st.stop()
 
-    # ── FIELD PRODUCTION TREND ────────────────────────────────────────────────
     st.markdown("### Field Production Trend")
     f_from, f_to = get_date_range("field_trend", prod_min, prod_max,
                                    default="3 Months")
@@ -672,26 +589,25 @@ elif page == "Production Trends":
 
     if not trend.empty:
         st.caption(f"📅 {f_from.strftime('%d-%b-%Y')} → {f_to.strftime('%d-%b-%Y')} | {len(trend)} data points")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=trend['date'], y=trend['total_oil'],
+        fig_trend = go.Figure()
+        fig_trend.add_trace(go.Scatter(x=trend['date'], y=trend['total_oil'],
             name='Oil (BOPD)', line=dict(color='#00b4d8', width=2),
             fill='tozeroy', fillcolor='rgba(0,180,216,0.08)',
             mode='lines+markers', marker=dict(size=6)))
-        fig.add_trace(go.Scatter(x=trend['date'], y=trend['total_liquid'],
+        fig_trend.add_trace(go.Scatter(x=trend['date'], y=trend['total_liquid'],
             name='Liquid (BLPD)',
             line=dict(color='#90e0ef', width=1.5, dash='dash'),
             mode='lines+markers', marker=dict(size=6)))
-        fig.add_trace(go.Scatter(x=trend['date'], y=trend['total_loss'],
+        fig_trend.add_trace(go.Scatter(x=trend['date'], y=trend['total_loss'],
             name='Loss (BBL)', line=dict(color='#e63946', width=1.5),
             mode='lines+markers', marker=dict(size=6)))
-        fig.update_layout(**CHART, height=420,
+        fig_trend.update_layout(**CHART, height=420,
             xaxis_title='Date', yaxis_title='Barrels',
             legend=dict(orientation='h', yanchor='bottom', y=1.02),
             xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45))
-        fig.update_xaxes(**GRID); fig.update_yaxes(**GRID)
-        st.plotly_chart(fig, use_container_width=True)
+        fig_trend.update_xaxes(**GRID); fig_trend.update_yaxes(**GRID)
+        st.plotly_chart(fig_trend, use_container_width=True)
 
-        # Daily summary follows same date range
         st.subheader("📋 Daily Production Summary")
         s = trend.copy()
         s['date'] = s['date'].dt.strftime('%d-%b-%Y')
@@ -704,7 +620,6 @@ elif page == "Production Trends":
 
     st.divider()
 
-    # ── PLATFORM WISE TREND ───────────────────────────────────────────────────
     st.markdown("### Platform wise Oil Trend")
     p_from, p_to = get_date_range("plat_trend", prod_min, prod_max,
                                    default="3 Months")
@@ -712,13 +627,13 @@ elif page == "Production Trends":
 
     if not pt.empty:
         pt['date'] = pd.to_datetime(pt['date']).dt.normalize()
-        st.caption(f"📅 {p_from.strftime('%d-%b-%Y')} → {p_to.strftime('%d-%b-%Y')} | {len(pt)} data points")
-        fig2 = px.line(pt, x='date', y='oil', color='platform',
+        st.caption(f"📅 {p_from.strftime('%d-%b-%Y')} → {p_to.strftime('%d-%b-%Y')}")
+        fig_plat = px.line(pt, x='date', y='oil', color='platform',
                        title='Oil by Platform', markers=True)
-        fig2.update_layout(**CHART, height=380,
+        fig_plat.update_layout(**CHART, height=380,
                            xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45))
-        fig2.update_xaxes(**GRID); fig2.update_yaxes(**GRID)
-        st.plotly_chart(fig2, use_container_width=True)
+        fig_plat.update_xaxes(**GRID); fig_plat.update_yaxes(**GRID)
+        st.plotly_chart(fig_plat, use_container_width=True)
     else:
         st.info("No data in selected range.")
 
@@ -747,59 +662,51 @@ elif page == "ESP Health":
              'pump_intake_temp_c','vibration_x','vibration_y']
     avail = [c for c in nc if c in wdf.columns]
 
-    # Latest metrics
     st.subheader(f"Latest Reading — {sel}")
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric("🌡️ Motor Temp (°C)",    format_metric(latest.get('motor_temp_1_c')))
-    c2.metric("⚡ VFD Frequency (Hz)", format_metric(latest.get('vfd_output_frequency_hz')))
-    c3.metric("📊 Motor Load (%)",     format_metric(latest.get('motor_load_pct')))
-    c4.metric("🔌 Motor Current (A)",  format_metric(latest.get('motor_current_avg_amp')))
+    lc1,lc2,lc3,lc4 = st.columns(4)
+    lc1.metric("🌡️ Motor Temp (°C)",    format_metric(latest.get('motor_temp_1_c')))
+    lc2.metric("⚡ VFD Frequency (Hz)", format_metric(latest.get('vfd_output_frequency_hz')))
+    lc3.metric("📊 Motor Load (%)",     format_metric(latest.get('motor_load_pct')))
+    lc4.metric("🔌 Motor Current (A)",  format_metric(latest.get('motor_current_avg_amp')))
 
-    c5,c6,c7,c8 = st.columns(4)
-    c5.metric("⬆️ Discharge (psi)",  format_metric(latest.get('pump_discharge_pressure_psi')))
-    c6.metric("⬇️ Intake (psi)",     format_metric(latest.get('pump_intake_pressure_psi')))
-    c7.metric("🌡️ Intake Temp (°C)", format_metric(latest.get('pump_intake_temp_c')))
-    c8.metric("📳 Vibration X",      format_metric(latest.get('vibration_x'), decimals=3))
+    lc5,lc6,lc7,lc8 = st.columns(4)
+    lc5.metric("⬆️ Discharge (psi)",  format_metric(latest.get('pump_discharge_pressure_psi')))
+    lc6.metric("⬇️ Intake (psi)",     format_metric(latest.get('pump_intake_pressure_psi')))
+    lc7.metric("🌡️ Intake Temp (°C)", format_metric(latest.get('pump_intake_temp_c')))
+    lc8.metric("📳 Vibration X",      format_metric(latest.get('vibration_x'), decimals=3))
 
     st.divider()
 
-    # ── SHARED TIME SELECTOR — PILL STYLE ────────────────────────────────────
     esp_ts_min = wdf['timestamp'].min().date()
     esp_ts_max = wdf['timestamp'].max().date()
 
     st.markdown("**📅 Chart Time Range**")
-
-    # Use session state to track active pill
     if 'esp_pill' not in st.session_state:
         st.session_state.esp_pill = "1 Month"
 
     pill_cols = st.columns(len(TIME_OPTIONS))
     for i, opt in enumerate(TIME_OPTIONS):
         with pill_cols[i]:
-            active = st.session_state.esp_pill == opt
-            label  = f"**{opt}**" if active else opt
-            if st.button(opt, key=f"esp_pill_{opt}",
-                         use_container_width=True):
+            if st.button(opt, key=f"esp_pill_{opt}", use_container_width=True):
                 st.session_state.esp_pill = opt
                 st.rerun()
 
     selected_pill = st.session_state.esp_pill
 
     if selected_pill == "Custom":
-        col1, col2 = st.columns(2)
-        with col1:
+        pc1, pc2 = st.columns(2)
+        with pc1:
             esp_from = st.date_input("From", value=esp_ts_min,
                 min_value=esp_ts_min, max_value=esp_ts_max,
                 key="esp_from", format="DD/MM/YYYY")
-        with col2:
+        with pc2:
             esp_to = st.date_input("To", value=esp_ts_max,
                 min_value=esp_ts_min, max_value=esp_ts_max,
                 key="esp_to", format="DD/MM/YYYY")
     else:
         esp_to = esp_ts_max
         delta_map = {
-            "1 Day":    timedelta(days=1),
-            "5 Days":   timedelta(days=5),
+            "1 Day":    timedelta(days=1),   "5 Days":   timedelta(days=5),
             "1 Month":  relativedelta(months=1),
             "3 Months": relativedelta(months=3),
             "6 Months": relativedelta(months=6),
@@ -807,101 +714,92 @@ elif page == "ESP Health":
         }
         esp_from = max(esp_ts_min, esp_to - delta_map[selected_pill])
 
-    # Filter and resample
-    wdf_filtered = wdf[
-        (wdf['timestamp'].dt.date >= esp_from) &
-        (wdf['timestamp'].dt.date <= esp_to)
-    ].copy()
+    wdf_f = wdf[(wdf['timestamp'].dt.date >= esp_from) &
+                (wdf['timestamp'].dt.date <= esp_to)].copy()
 
-    st.caption(
-        f"📊 12-hourly averages | Raw: {len(wdf_filtered):,} pts | "
-        f"{esp_from.strftime('%d-%b-%Y')} → {esp_to.strftime('%d-%b-%Y')}")
+    st.caption(f"📊 12h avg | Raw: {len(wdf_f):,} | "
+               f"{esp_from.strftime('%d-%b-%Y')} → {esp_to.strftime('%d-%b-%Y')}")
 
-    if wdf_filtered.empty:
+    if wdf_f.empty:
         st.info("No ESP data in selected range.")
         st.stop()
 
-    rs = (wdf_filtered.set_index('timestamp')[avail]
+    rs = (wdf_f.set_index('timestamp')[avail]
           .resample('12h').mean().dropna(how='all').reset_index())
 
-    # Motor temp
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=rs['timestamp'], y=rs['motor_temp_1_c'],
+    fig_mt = go.Figure()
+    fig_mt.add_trace(go.Scatter(x=rs['timestamp'], y=rs['motor_temp_1_c'],
         name='Motor Temp', line=dict(color='#e63946',width=2),
         mode='lines+markers', marker=dict(size=4)))
-    fig.add_hline(y=135, line_dash="dash", line_color="orange",
-                  annotation_text="Warning 135°C")
-    fig.add_hline(y=150, line_dash="dash", line_color="red",
-                  annotation_text="Trip 150°C")
-    fig.update_layout(**CHART, title=f'Motor Temperature — {sel}', height=320,
-                      xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
-                      yaxis_title='°C')
-    fig.update_xaxes(**GRID); fig.update_yaxes(**GRID)
-    st.plotly_chart(fig, use_container_width=True)
+    fig_mt.add_hline(y=135, line_dash="dash", line_color="orange",
+                     annotation_text="Warning 135°C")
+    fig_mt.add_hline(y=150, line_dash="dash", line_color="red",
+                     annotation_text="Trip 150°C")
+    fig_mt.update_layout(**CHART, title=f'Motor Temperature — {sel}', height=320,
+                         xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
+                         yaxis_title='°C')
+    fig_mt.update_xaxes(**GRID); fig_mt.update_yaxes(**GRID)
+    st.plotly_chart(fig_mt, use_container_width=True)
 
-    # Phase current
     st.subheader("⚡ Phase Current Balance")
-    fig2 = go.Figure()
+    fig_ph = go.Figure()
     for col,name,color in [
         ('motor_current_a_amp','Phase A','#00b4d8'),
         ('motor_current_b_amp','Phase B','#f4a261'),
         ('motor_current_c_amp','Phase C','#2a9d8f')]:
-        fig2.add_trace(go.Scatter(x=rs['timestamp'], y=rs[col],
+        fig_ph.add_trace(go.Scatter(x=rs['timestamp'], y=rs[col],
             name=name, line=dict(color=color),
             mode='lines+markers', marker=dict(size=4)))
-    fig2.update_layout(**CHART, title='3-Phase Current (12h avg)', height=300,
-                       xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
-                       yaxis_title='Amps')
-    fig2.update_xaxes(**GRID); fig2.update_yaxes(**GRID)
-    st.plotly_chart(fig2, use_container_width=True)
+    fig_ph.update_layout(**CHART, title='3-Phase Current (12h avg)', height=300,
+                         xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
+                         yaxis_title='Amps')
+    fig_ph.update_xaxes(**GRID); fig_ph.update_yaxes(**GRID)
+    st.plotly_chart(fig_ph, use_container_width=True)
 
-    # Pump pressure
     st.subheader("🔄 Pump Pressure")
-    fig3 = go.Figure()
-    fig3.add_trace(go.Scatter(x=rs['timestamp'],
+    fig_pp = go.Figure()
+    fig_pp.add_trace(go.Scatter(x=rs['timestamp'],
         y=rs['pump_intake_pressure_psi'], name='Intake (psi)',
         line=dict(color='#90e0ef'), mode='lines+markers', marker=dict(size=4)))
-    fig3.add_trace(go.Scatter(x=rs['timestamp'],
+    fig_pp.add_trace(go.Scatter(x=rs['timestamp'],
         y=rs['pump_discharge_pressure_psi'], name='Discharge (psi)',
         line=dict(color='#0077b6'), mode='lines+markers', marker=dict(size=4)))
-    fig3.update_layout(**CHART, title='Pump Pressure (12h avg)', height=300,
-                       xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
-                       yaxis_title='psi')
-    fig3.update_xaxes(**GRID); fig3.update_yaxes(**GRID)
-    st.plotly_chart(fig3, use_container_width=True)
+    fig_pp.update_layout(**CHART, title='Pump Pressure (12h avg)', height=300,
+                         xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
+                         yaxis_title='psi')
+    fig_pp.update_xaxes(**GRID); fig_pp.update_yaxes(**GRID)
+    st.plotly_chart(fig_pp, use_container_width=True)
 
-    # VFD
     st.subheader("📡 VFD Frequency")
-    fig4 = go.Figure()
-    fig4.add_trace(go.Scatter(x=rs['timestamp'],
+    fig_vf = go.Figure()
+    fig_vf.add_trace(go.Scatter(x=rs['timestamp'],
         y=rs['vfd_output_frequency_hz'], name='VFD (Hz)',
         line=dict(color='#e9c46a'), mode='lines+markers', marker=dict(size=4)))
-    fig4.add_hline(y=60, line_dash="dash", line_color="red",
-                   annotation_text="Max 60 Hz")
-    fig4.add_hline(y=40, line_dash="dash", line_color="orange",
-                   annotation_text="Min 40 Hz")
-    fig4.update_layout(**CHART, title='VFD Frequency (12h avg)', height=280,
-                       xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
-                       yaxis_title='Hz')
-    fig4.update_xaxes(**GRID); fig4.update_yaxes(**GRID)
-    st.plotly_chart(fig4, use_container_width=True)
+    fig_vf.add_hline(y=60, line_dash="dash", line_color="red",
+                     annotation_text="Max 60 Hz")
+    fig_vf.add_hline(y=40, line_dash="dash", line_color="orange",
+                     annotation_text="Min 40 Hz")
+    fig_vf.update_layout(**CHART, title='VFD Frequency (12h avg)', height=280,
+                         xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
+                         yaxis_title='Hz')
+    fig_vf.update_xaxes(**GRID); fig_vf.update_yaxes(**GRID)
+    st.plotly_chart(fig_vf, use_container_width=True)
 
-    # Motor load
     st.subheader("📊 Motor Load")
-    fig5 = go.Figure()
-    fig5.add_trace(go.Scatter(x=rs['timestamp'], y=rs['motor_load_pct'],
+    fig_ml = go.Figure()
+    fig_ml.add_trace(go.Scatter(x=rs['timestamp'], y=rs['motor_load_pct'],
         name='Load (%)', line=dict(color='#c77dff'),
         fill='tozeroy', fillcolor='rgba(199,125,255,0.08)',
         mode='lines+markers', marker=dict(size=4)))
-    fig5.add_hline(y=90, line_dash="dash", line_color="red",
-                   annotation_text="Overload 90%")
-    fig5.add_hline(y=30, line_dash="dash", line_color="orange",
-                   annotation_text="Underload 30%")
-    fig5.update_layout(**CHART, title='Motor Load (12h avg)', height=280,
-                       xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
-                       yaxis_title='%')
-    fig5.update_xaxes(**GRID); fig5.update_yaxes(**GRID)
-    st.plotly_chart(fig5, use_container_width=True)
+    fig_ml.add_hline(y=90, line_dash="dash", line_color="red",
+                     annotation_text="Overload 90%")
+    fig_ml.add_hline(y=30, line_dash="dash", line_color="orange",
+                     annotation_text="Underload 30%")
+    fig_ml.update_layout(**CHART, title='Motor Load (12h avg)', height=280,
+                         xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45),
+                         yaxis_title='%')
+    fig_ml.update_xaxes(**GRID); fig_ml.update_yaxes(**GRID)
+    st.plotly_chart(fig_ml, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 4 — WATER INJECTION
@@ -914,11 +812,11 @@ elif page == "Water Injection":
         st.stop()
 
     st.caption(f"📅 Data as of: {wi['date'].max()}")
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric("💉 Total Injection (BPD)", f"{wi['flow_rate_bpd'].sum():,.0f}")
-    c2.metric("🎯 Planned (BPD)",         f"{wi['planned_wi_bpd'].sum():,.0f}")
-    c3.metric("📊 Cumulative (BBL)",      f"{wi['cumulative_flow_bbl'].sum():,.0f}")
-    c4.metric("✅ Wells Injecting",       f"{len(wi[wi['status']=='Injection'])}")
+    wc1,wc2,wc3,wc4 = st.columns(4)
+    wc1.metric("💉 Total Injection (BPD)", f"{wi['flow_rate_bpd'].sum():,.0f}")
+    wc2.metric("🎯 Planned (BPD)",         f"{wi['planned_wi_bpd'].sum():,.0f}")
+    wc3.metric("📊 Cumulative (BBL)",      f"{wi['cumulative_flow_bbl'].sum():,.0f}")
+    wc4.metric("✅ Wells Injecting",       f"{len(wi[wi['status']=='Injection'])}")
 
     st.divider()
     st.subheader("Well Level Data")
@@ -940,22 +838,21 @@ elif page == "Water Injection":
         SUM(flow_rate_bpd) as total_bpd,
         SUM(cumulative_flow_bbl) as cumulative
         FROM water_injection
-        WHERE date >= ? AND date <= ?
-        AND date >= '2000-01-01'
+        WHERE date >= ? AND date <= ? AND date >= '2000-01-01'
         GROUP BY date ORDER BY date""",
         conn, params=(str(wi_from), str(wi_to)))
     conn.close()
 
     if not wt.empty:
         wt['date'] = pd.to_datetime(wt['date']).dt.normalize()
-        st.caption(f"📅 {wi_from.strftime('%d-%b-%Y')} → {wi_to.strftime('%d-%b-%Y')} | {len(wt)} data points")
-        fig = px.line(wt, x='date', y='total_bpd',
-                      title='Daily Water Injection Rate (BPD)', markers=True)
-        fig.update_layout(**CHART, height=360,
-                          xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45),
-                          yaxis_title='BPD')
-        fig.update_xaxes(**GRID); fig.update_yaxes(**GRID)
-        st.plotly_chart(fig, use_container_width=True)
+        st.caption(f"📅 {wi_from.strftime('%d-%b-%Y')} → {wi_to.strftime('%d-%b-%Y')} | {len(wt)} pts")
+        fig_wi = px.line(wt, x='date', y='total_bpd',
+                         title='Daily Water Injection Rate (BPD)', markers=True)
+        fig_wi.update_layout(**CHART, height=360,
+                             xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45),
+                             yaxis_title='BPD')
+        fig_wi.update_xaxes(**GRID); fig_wi.update_yaxes(**GRID)
+        st.plotly_chart(fig_wi, use_container_width=True)
     else:
         st.info("No data in selected range.")
 
@@ -974,87 +871,80 @@ elif page == "Pressure Analysis":
 
     all_pdf['timestamp'] = pd.to_datetime(all_pdf['timestamp'])
 
-    # ── ROUTE 1 ───────────────────────────────────────────────────────────────
     st.markdown("### 🔵 Route 1 — R10A to Heera")
     st.caption("R9A + R13A + R10A → Heera via 10\" 45km")
     r1_from, r1_to = get_date_range("route1", pr_min, pr_max, default="1 Month")
-    r1_df = all_pdf[
-        (all_pdf['timestamp'].dt.date >= r1_from) &
-        (all_pdf['timestamp'].dt.date <= r1_to)].copy()
+    r1 = all_pdf[(all_pdf['timestamp'].dt.date >= r1_from) &
+                 (all_pdf['timestamp'].dt.date <= r1_to)].copy()
 
-    if not r1_df.empty:
+    if not r1.empty:
         st.caption(f"📅 {r1_from.strftime('%d-%b-%Y')} → {r1_to.strftime('%d-%b-%Y')}")
-        fig1 = go.Figure()
+        fig_r1 = go.Figure()
         for col,name,color in [
             ('r7a_r10a_lp','R7A L/P','#00b4d8'),
             ('r10a_r9a_rp','R9A→R10A R/P','#90e0ef'),
             ('r10a_hra_lp','R10A→HRA L/P','#0077b6'),
             ('r9a_r10a_lp','R9A L/P','#48cae4'),
             ('r13a_r10a_lp','R13A L/P','#ade8f4')]:
-            fig1.add_trace(go.Scatter(x=r1_df['timestamp'], y=r1_df[col],
-                                      name=name, line=dict(color=color)))
-        fig1.update_layout(**CHART, height=380, yaxis_title='KSC',
-                           xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
-        fig1.update_xaxes(**GRID); fig1.update_yaxes(**GRID)
-        st.plotly_chart(fig1, use_container_width=True)
+            fig_r1.add_trace(go.Scatter(x=r1['timestamp'], y=r1[col],
+                                        name=name, line=dict(color=color)))
+        fig_r1.update_layout(**CHART, height=380, yaxis_title='KSC',
+                             xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
+        fig_r1.update_xaxes(**GRID); fig_r1.update_yaxes(**GRID)
+        st.plotly_chart(fig_r1, use_container_width=True)
     else:
         st.info("No data in selected range.")
 
     st.divider()
 
-    # ── ROUTE 2 ───────────────────────────────────────────────────────────────
     st.markdown("### 🟠 Route 2 — R12A to Heera")
     st.caption("R7A + R12B + R12A → Heera via 12\" 41km + 10\" 41km")
     r2_from, r2_to = get_date_range("route2", pr_min, pr_max, default="1 Month")
-    r2_df = all_pdf[
-        (all_pdf['timestamp'].dt.date >= r2_from) &
-        (all_pdf['timestamp'].dt.date <= r2_to)].copy()
+    r2 = all_pdf[(all_pdf['timestamp'].dt.date >= r2_from) &
+                 (all_pdf['timestamp'].dt.date <= r2_to)].copy()
 
-    if not r2_df.empty:
+    if not r2.empty:
         st.caption(f"📅 {r2_from.strftime('%d-%b-%Y')} → {r2_to.strftime('%d-%b-%Y')}")
-        fig2 = go.Figure()
+        fig_r2 = go.Figure()
         for col,name,color in [
             ('r10a_r12a_lp','R10A→R12A L/P','#f4a261'),
             ('r12a_r10a_rp','R12A R/P from R10A','#e76f51'),
             ('r12a_r12b_rp','R12A R/P from R12B','#e9c46a'),
             ('r12a_hra_lp','R12A→HRA L/P','#264653')]:
-            fig2.add_trace(go.Scatter(x=r2_df['timestamp'], y=r2_df[col],
-                                      name=name, line=dict(color=color)))
-        fig2.update_layout(**CHART, height=380, yaxis_title='KSC',
-                           xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
-        fig2.update_xaxes(**GRID); fig2.update_yaxes(**GRID)
-        st.plotly_chart(fig2, use_container_width=True)
+            fig_r2.add_trace(go.Scatter(x=r2['timestamp'], y=r2[col],
+                                        name=name, line=dict(color=color)))
+        fig_r2.update_layout(**CHART, height=380, yaxis_title='KSC',
+                             xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
+        fig_r2.update_xaxes(**GRID); fig_r2.update_yaxes(**GRID)
+        st.plotly_chart(fig_r2, use_container_width=True)
     else:
         st.info("No data in selected range.")
 
     st.divider()
 
-    # ── ΔP ANALYSIS ───────────────────────────────────────────────────────────
     st.markdown("### ⚠️ Pipeline ΔP Analysis")
     st.caption("ΔP = L/P - R/P. Rising ΔP = restriction building up")
     dp_from, dp_to = get_date_range("dp", pr_min, pr_max, default="1 Month")
-    dp_df = all_pdf[
-        (all_pdf['timestamp'].dt.date >= dp_from) &
-        (all_pdf['timestamp'].dt.date <= dp_to)].copy()
+    dp = all_pdf[(all_pdf['timestamp'].dt.date >= dp_from) &
+                 (all_pdf['timestamp'].dt.date <= dp_to)].copy()
 
-    if not dp_df.empty:
-        dp_df['r7a_dp']  = dp_df['r7a_r10a_lp']  - dp_df['r10a_r7a_rp']
-        dp_df['r9a_dp']  = dp_df['r9a_r10a_lp']  - dp_df['r10a_r9a_rp']
-        dp_df['r13a_dp'] = dp_df['r13a_r10a_lp'] - dp_df['r10a_r13a_rp']
-
+    if not dp.empty:
+        dp['r7a_dp']  = dp['r7a_r10a_lp']  - dp['r10a_r7a_rp']
+        dp['r9a_dp']  = dp['r9a_r10a_lp']  - dp['r10a_r9a_rp']
+        dp['r13a_dp'] = dp['r13a_r10a_lp'] - dp['r10a_r13a_rp']
         st.caption(f"📅 {dp_from.strftime('%d-%b-%Y')} → {dp_to.strftime('%d-%b-%Y')}")
-        fig3 = go.Figure()
+        fig_dp = go.Figure()
         for col,name,color in [
             ('r7a_dp','R7A ΔP','#00b4d8'),
             ('r9a_dp','R9A ΔP','#f4a261'),
             ('r13a_dp','R13A ΔP','#2a9d8f')]:
-            fig3.add_trace(go.Scatter(x=dp_df['timestamp'], y=dp_df[col],
-                                      name=name, line=dict(color=color)))
-        fig3.update_layout(**CHART, title='ΔP (L/P − R/P)', height=340,
-                           yaxis_title='ΔP (KSC)',
-                           xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
-        fig3.update_xaxes(**GRID); fig3.update_yaxes(**GRID)
-        st.plotly_chart(fig3, use_container_width=True)
+            fig_dp.add_trace(go.Scatter(x=dp['timestamp'], y=dp[col],
+                                        name=name, line=dict(color=color)))
+        fig_dp.update_layout(**CHART, title='ΔP (L/P − R/P)', height=340,
+                             yaxis_title='ΔP (KSC)',
+                             xaxis=dict(tickformat='%d-%b-%Y',tickangle=-45))
+        fig_dp.update_xaxes(**GRID); fig_dp.update_yaxes(**GRID)
+        st.plotly_chart(fig_dp, use_container_width=True)
     else:
         st.info("No data in selected range.")
 
@@ -1122,17 +1012,14 @@ elif page == "Early Warning":
                         'Parameter':'VFD Frequency','Value':f"{freq:.1f} Hz",
                         'Threshold':'<40 Hz','Action':'Check inflow'})
 
-    # Pressure checks use last 3 days
     prf = load_all_pressure()
     if not prf.empty:
         prf['timestamp'] = pd.to_datetime(prf['timestamp'])
         prf = prf[prf['timestamp'] >= prf['timestamp'].max() - pd.Timedelta(days=3)]
         for col,label in [
-            ('r7a_r10a_lp','R7A Launcher'),
-            ('r9a_r10a_lp','R9A Launcher'),
+            ('r7a_r10a_lp','R7A Launcher'),('r9a_r10a_lp','R9A Launcher'),
             ('r13a_r10a_lp','R13A Launcher'),
-            ('r10a_hra_lp','R10A→HRA'),
-            ('r12a_hra_lp','R12A→HRA')]:
+            ('r10a_hra_lp','R10A→HRA'),('r12a_hra_lp','R12A→HRA')]:
             if col in prf.columns:
                 rc = prf[col].dropna()
                 if len(rc) >= 4:
