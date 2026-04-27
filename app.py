@@ -421,7 +421,7 @@ logo_b64 = get_base64_image("ongc_logo.jpg")
 logo_img = f'<img src="data:image/jpeg;base64,{logo_b64}">' if logo_b64 else "⚡"
 
 st.markdown(f"""
-<div class="navbar">
+<div class="navbar" style="display: flex !important; position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; z-index: 9999 !important;">
     <div class="navbar-brand">
         {logo_img}
         <span class="navbar-brand-text">OIL FIELD</span>
@@ -432,6 +432,10 @@ st.markdown(f"""
         🕐 {datetime.now().strftime('%d-%b-%Y %H:%M')}
     </span>
 </div>
+<script>
+document.querySelector('.navbar').style.position = 'fixed';
+document.querySelector('.navbar').style.zIndex = '9999';
+</script>
 """, unsafe_allow_html=True)
 
 # Check if page was changed via URL query parameter
