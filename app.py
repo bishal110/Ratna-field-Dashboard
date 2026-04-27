@@ -502,33 +502,12 @@ if page == "Field Overview":
             return f'<span style="color:#90e0ef;font-size:13px;font-weight:500;">— 0.0%</span>'
 
     def kpi_card(label, value, subtitle="", change_html=""):
-        """Render a glassmorphism KPI card"""
+        subtitle_html = f'<span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.4);">{subtitle}</span>' if subtitle else ""
         return f"""
-        <div style="
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(0,180,216,0.22);
-            border-radius: 12px;
-            padding: 18px 20px;
-            backdrop-filter: blur(10px);
-            transition: all 0.25s ease;
-            height: 110px;
-            display: flex; flex-direction: column; justify-content: space-between;
-        ">
-            <div style="
-                font-family:'Inter',sans-serif;
-                font-size:10px; font-weight:600;
-                color:rgba(144,224,239,0.6);
-                letter-spacing:1.5px; text-transform:uppercase;
-            ">{label}</div>
-            <div style="
-                font-family:'Rajdhani',sans-serif;
-                font-size:2.1rem; font-weight:700;
-                color:#ffffff; line-height:1;
-            ">{value}</div>
-            <div style="display:flex; align-items:center; gap:8px;">
-                {change_html}
-                <span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.4);">{subtitle}</span>
-            </div>
+        <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(0,180,216,0.22);border-radius:12px;padding:18px 20px;backdrop-filter:blur(10px);height:110px;display:flex;flex-direction:column;justify-content:space-between;">
+            <div style="font-family:Inter,sans-serif;font-size:10px;font-weight:600;color:rgba(144,224,239,0.6);letter-spacing:1.5px;text-transform:uppercase;">{label}</div>
+            <div style="font-family:Rajdhani,sans-serif;font-size:2.1rem;font-weight:700;color:#ffffff;line-height:1;">{value}</div>
+            <div style="display:flex;align-items:center;gap:8px;">{change_html}{subtitle_html}</div>
         </div>
         """
 
@@ -574,12 +553,12 @@ if page == "Field Overview":
             change_html=loss_html
         ), unsafe_allow_html=True)
 
-    with c4:
+   with c4:
         st.markdown(kpi_card(
             "Wells Flowing",
             f"{wells_flowing} / {wells_total}",
-            subtitle="active producers",
-            change_html=""
+            subtitle="",
+            change_html='<span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.4);">active producers</span>'
         ), unsafe_allow_html=True)
 
     with c5:
