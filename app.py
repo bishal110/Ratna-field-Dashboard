@@ -434,35 +434,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Handle page selection via Streamlit buttons (hidden visually)
-cols = st.columns(len(PAGES))
-for i, (icon, name) in enumerate(PAGES):
-    with cols[i]:
-        if st.button(f"{icon} {name}", key=f"nav_{name}",
-                     use_container_width=True):
-            st.session_state.page = name
-            st.rerun()
-
-# Hide the Streamlit buttons visually but keep them functional
-st.markdown("""
-<style>
-    /* Hide nav buttons — they work invisibly behind navbar */
-    [data-testid="stHorizontalBlock"] {{
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        z-index: 1000;
-        height: 56px;
-        opacity: 0;
-        gap: 0 !important;
-    }}
-    [data-testid="stHorizontalBlock"] > div {{
-        padding: 0 !important;
-        height: 56px;
-    }}
-</style>
-""", unsafe_allow_html=True)
+# Check if page was changed via URL query parameter
+if 'page' in st.query_params:
+    page_param = st.query_params['page'].replace('_', ' ')
+    if page_param in [name for _, name in PAGES]:
+        st.session_state.page = page_param
 
 page = st.session_state.page
 # ══════════════════════════════════════════════════════════════════════════════
@@ -613,8 +589,8 @@ if page == "Field Overview":
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 2 — PRODUCTION TRENDS
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == " Production Trends":
-    st.title(" Production Trends")
+elif page == "Production Trends":
+    st.title("📈 Production Trends")
 
     conn     = get_connection()
     date_rng = pd.read_sql(
