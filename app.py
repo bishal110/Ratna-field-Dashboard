@@ -392,12 +392,12 @@ st.markdown(f"""
 
 # Navigation pages
 PAGES = [
-    ("Field Overview"),
-    ("Production Trends"),
-    ("ESP Health"),
-    ("Water Injection"),
-    ("Pressure Analysis"),
-    ("Early Warning"),
+    ("🏠", "Field Overview"),
+    ("📈", "Production Trends"),
+    ("🔧", "ESP Health"),
+    ("💧", "Water Injection"),
+    ("📊", "Pressure Analysis"),
+    ("⚠️", "Early Warning"),
 ]
 
 # Use query params to track active page
