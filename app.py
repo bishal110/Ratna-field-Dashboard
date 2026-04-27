@@ -478,53 +478,62 @@ if page == "Field Overview":
     total_oil     = prod_df['oil_rate_bpd'].sum()
     total_liquid  = prod_df['liquid_rate_bpd'].sum()
     total_loss    = prod_df['production_loss_bbl'].sum()
+    net_oil       = prod_df['net_oil_bbl'].max() if 'net_oil_bbl' in prod_df.columns else None
     wells_flowing = len(prod_df[prod_df['well_status'].str.contains(
         'Flowing', na=False, case=False)])
     wells_total   = len(prod_df)
     wells_down    = len(prod_df[prod_df['well_status'].str.contains(
         'Non|Workover|Failure', na=False, case=False)])
 
-    prev_oil    = prev_df['oil_rate_bpd'].sum()    if not prev_df.empty else None
-    prev_liquid = prev_df['liquid_rate_bpd'].sum() if not prev_df.empty else None
-    prev_loss   = prev_df['production_loss_bbl'].sum() if not prev_df.empty else None
+    prev_oil     = prev_df['oil_rate_bpd'].sum()    if not prev_df.empty else None
+    prev_liquid  = prev_df['liquid_rate_bpd'].sum() if not prev_df.empty else None
+    prev_loss    = prev_df['production_loss_bbl'].sum() if not prev_df.empty else None
+    prev_net_oil = prev_df['net_oil_bbl'].max() \
+                   if not prev_df.empty and 'net_oil_bbl' in prev_df.columns else None
     prev_date_str = all_dates['date'].iloc[1] if len(all_dates) >= 2 else None
 
-    def pct_change(current, previous):
-        """Calculate percentage change and return styled HTML"""
+    def pct_change(current, previous, invert=False):
+        """
+        Calculate % change and return styled arrow HTML.
+        invert=True means increase is bad (e.g. production loss)
+        """
         if previous is None or previous == 0:
             return ""
         chg = ((current - previous) / previous) * 100
-        if chg > 0:
-            return f'<span style="color:#2a9d8f;font-size:13px;font-weight:500;">▲ +{chg:.1f}%</span>'
-        elif chg < 0:
-            return f'<span style="color:#e63946;font-size:13px;font-weight:500;">▼ {chg:.1f}%</span>'
-        else:
-            return f'<span style="color:#90e0ef;font-size:13px;font-weight:500;">— 0.0%</span>'
+        if chg == 0:
+            return '<span style="color:#90e0ef;font-size:13px;font-weight:500;">— 0.0%</span>'
+        going_up = chg > 0
+        is_good  = going_up if not invert else not going_up
+        color    = "#2a9d8f" if is_good else "#e63946"
+        arrow    = "▲" if going_up else "▼"
+        sign     = "+" if going_up else ""
+        return f'<span style="color:{color};font-size:13px;font-weight:500;">{arrow} {sign}{chg:.1f}%</span>'
 
     def kpi_card(label, value, subtitle="", change_html=""):
-        subtitle_html = f'<span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.4);">{subtitle}</span>' if subtitle else ""
+        subtitle_html = f'<span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.35);">{subtitle}</span>' \
+                        if subtitle else ""
         return f"""
-        <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(0,180,216,0.22);border-radius:12px;padding:18px 20px;backdrop-filter:blur(10px);height:110px;display:flex;flex-direction:column;justify-content:space-between;">
-            <div style="font-family:Inter,sans-serif;font-size:10px;font-weight:600;color:rgba(144,224,239,0.6);letter-spacing:1.5px;text-transform:uppercase;">{label}</div>
-            <div style="font-family:Rajdhani,sans-serif;font-size:2.1rem;font-weight:700;color:#ffffff;line-height:1;">{value}</div>
-            <div style="display:flex;align-items:center;gap:8px;">{change_html}{subtitle_html}</div>
+        <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(0,180,216,0.22);
+            border-radius:12px;padding:18px 20px;backdrop-filter:blur(10px);
+            height:115px;display:flex;flex-direction:column;justify-content:space-between;">
+            <div style="font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+                color:rgba(144,224,239,0.6);letter-spacing:1.5px;
+                text-transform:uppercase;">{label}</div>
+            <div style="font-family:Rajdhani,sans-serif;font-size:2rem;
+                font-weight:700;color:#ffffff;line-height:1;">{value}</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                {change_html}{subtitle_html}
+            </div>
         </div>
         """
 
     vs_text = f"vs {prev_date_str}" if prev_date_str else ""
 
     # ── RENDER KPI CARDS ──────────────────────────────────────────────────────
-    c1,c2,c3,c4,c5 = st.columns(5)
+    # Order: Total Liquid | Total Oil | Net Oil | Production Loss | Wells Flowing | Wells Down
+    c1,c2,c3,c4,c5,c6 = st.columns(6)
 
     with c1:
-        st.markdown(kpi_card(
-            "Total Oil (BOPD)",
-            f"{total_oil:,.0f}",
-            subtitle=vs_text,
-            change_html=pct_change(total_oil, prev_oil)
-        ), unsafe_allow_html=True)
-
-    with c2:
         st.markdown(kpi_card(
             "Total Liquid (BLPD)",
             f"{total_liquid:,.0f}",
@@ -532,40 +541,46 @@ if page == "Field Overview":
             change_html=pct_change(total_liquid, prev_liquid)
         ), unsafe_allow_html=True)
 
-    with c3:
-        # For loss — invert colors (increase in loss = bad = red)
-        loss_html = ""
-        if prev_loss is not None and prev_loss > 0:
-            chg = ((total_loss - prev_loss) / prev_loss) * 100
-            if chg > 0:
-                loss_html = f'<span style="color:#e63946;font-size:13px;font-weight:500;">▲ +{chg:.1f}%</span>'
-            elif chg < 0:
-                loss_html = f'<span style="color:#2a9d8f;font-size:13px;font-weight:500;">▼ {chg:.1f}%</span>'
-            else:
-                loss_html = f'<span style="color:#90e0ef;font-size:13px;font-weight:500;">— 0.0%</span>'
-        elif prev_loss == 0 and total_loss > 0:
-            loss_html = f'<span style="color:#e63946;font-size:13px;font-weight:500;">▲ New loss</span>'
+    with c2:
+        st.markdown(kpi_card(
+            "Total Oil (BOPD)",
+            f"{total_oil:,.0f}",
+            subtitle=vs_text,
+            change_html=pct_change(total_oil, prev_oil)
+        ), unsafe_allow_html=True)
 
+    with c3:
+        net_display = f"{net_oil:,.0f}" if net_oil else "N/A"
+        st.markdown(kpi_card(
+            "Net Oil — DPR (BBL)",
+            net_display,
+            subtitle=vs_text,
+            change_html=pct_change(net_oil, prev_net_oil) if net_oil else ""
+        ), unsafe_allow_html=True)
+
+    with c4:
+        # Loss — invert=True means increase is bad
         st.markdown(kpi_card(
             "Production Loss (BBL)",
             f"{total_loss:,.0f}",
             subtitle=vs_text,
-            change_html=loss_html
+            change_html=pct_change(total_loss, prev_loss, invert=True)
         ), unsafe_allow_html=True)
 
-    with c4:
+    with c5:
         st.markdown(kpi_card(
             "Wells Flowing",
             f"{wells_flowing} / {wells_total}",
             subtitle="",
-            change_html='<span style="font-family:Inter,sans-serif;font-size:10px;color:rgba(144,224,239,0.4);">active producers</span>'
+            change_html='<span style="font-family:Inter,sans-serif;font-size:10px;'
+                        'color:rgba(144,224,239,0.4);">active producers</span>'
         ), unsafe_allow_html=True)
 
-    with c5:
-        # Red highlight if wells down > 0
-        wells_down_html = f'<span style="color:#e63946;font-size:13px;font-weight:500;">⚠️ {wells_down} offline</span>' \
-                          if wells_down > 0 else \
-                          f'<span style="color:#2a9d8f;font-size:13px;font-weight:500;">✅ All running</span>'
+    with c6:
+        wells_down_html = \
+            f'<span style="color:#e63946;font-size:13px;font-weight:500;">⚠️ {wells_down} offline</span>' \
+            if wells_down > 0 else \
+            f'<span style="color:#2a9d8f;font-size:13px;font-weight:500;">✅ All running</span>'
         st.markdown(kpi_card(
             "Wells Down",
             f"{wells_down}",
@@ -573,36 +588,7 @@ if page == "Field Overview":
             change_html=wells_down_html
         ), unsafe_allow_html=True)
 
-    # Small spacing after cards
     st.markdown("<div style='margin-top:16px'></div>", unsafe_allow_html=True)
-    st.divider()
-    st.subheader("📊 Platform Summary")
-
-    plat = prod_df.groupby('platform').agg(
-        Oil_BOPD=('oil_rate_bpd','sum'),
-        Liquid_BLPD=('liquid_rate_bpd','sum'),
-        Loss_BBL=('production_loss_bbl','sum'),
-        Wells_Total=('well_name','count'),
-        Wells_Flowing=('well_status',
-            lambda x: x.str.contains('Flowing',na=False,case=False).sum())
-    ).reset_index()
-
-    if not pressure_df.empty:
-        pr = pressure_df.iloc[0]
-        plat['Line_Pressure_KSC'] = plat['platform'].map({
-            'R-7A':  pr.get('r7a_r10a_lp'),
-            'R-10A': pr.get('r10a_mlp'),
-            'R-9A':  pr.get('r9a_r10a_lp'),
-            'R-12A': pr.get('r12a_hra_lp'),
-            'R-12B': pr.get('r12b_mlp'),
-            'R-13A': pr.get('r13a_r10a_lp'),
-        })
-
-    st.dataframe(plat.style.format({
-        'Oil_BOPD':'{:,.0f}','Liquid_BLPD':'{:,.0f}',
-        'Loss_BBL':'{:,.0f}','Line_Pressure_KSC':'{:.1f}'}),
-        use_container_width=True, hide_index=True)
-
     st.divider()
     c1,c2 = st.columns(2)
     with c1:

@@ -329,7 +329,7 @@ def derive_platform_from_well_name(well_name):
 # SHEET PROCESSORS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def ingest_oil_production(df_sheet, date, conn):
+def ingest_oil_production(df_sheet, date, conn, net_oil_bbl=None):
     """
     Process oil production sheet.
 
@@ -395,10 +395,10 @@ def ingest_oil_production(df_sheet, date, conn):
             conn.execute("""
                 INSERT OR IGNORE INTO oil_production
                 (date, platform, well_name, liquid_rate_bpd, oil_rate_bpd,
-                production_loss_bbl, well_status, remarks)
-                VALUES (?,?,?,?,?,?,?,?)
+                production_loss_bbl, well_status, remarks, net_oil_bbl)
+                VALUES (?,?,?,?,?,?,?,?,?)
             """, (date, current_platform, well_name, liquid_rate,
-                  oil_rate, prod_loss, well_status, remarks))
+                  oil_rate, prod_loss, well_status, remarks, net_oil_bbl))
             inserted += 1
 
         except Exception:
@@ -570,22 +570,52 @@ def process_single_file(file_info, conn):
         print(f"      ❌ Cannot open file: {e}")
         return 0, 0
 
+    # ── EXTRACT NET OIL FROM DPR ROW ──────────────────────────────────────────
+    # Search for "Total Oil Production (PVT Compensated" text in Overall sheet
+    # Value is in the last non-empty cell of that row
+    # Row position may shift as new wells are added — so we search by text
+    net_oil_bbl = None
+    try:
+        for sheet in xl.sheet_names:
+            sheet_lower = sheet.lower().strip()
+            if 'overall' in sheet_lower or 'oil' in sheet_lower:
+                if 'water' not in sheet_lower and 'injection' not in sheet_lower:
+                    df_raw = pd.read_excel(filepath,
+                                           sheet_name=sheet,
+                                           header=None)
+                    for idx, row in df_raw.iterrows():
+                        row_str = ' '.join(
+                            str(v) for v in row.values if pd.notna(v))
+                        if 'total oil production' in row_str.lower() and \
+                           'pvt' in row_str.lower() and \
+                           'dpr' in row_str.lower():
+                            # Found the row — get last non-empty numeric value
+                            numeric_vals = pd.to_numeric(
+                                row, errors='coerce').dropna()
+                            if not numeric_vals.empty:
+                                net_oil_bbl = float(numeric_vals.iloc[-1])
+                                print(f"      📊 Net Oil (DPR): {net_oil_bbl:.0f} BBL "
+                                      f"(row {idx})")
+                            break
+                    break
+    except Exception as e:
+        print(f"      ⚠️  Could not extract net oil: {e}")
+
     for sheet in xl.sheet_names:
         sheet_lower = sheet.lower().strip()
         df = pd.read_excel(filepath, sheet_name=sheet, header=None)
 
-        # Oil production sheet
+        # Oil production sheet — Overall_Sheet only
         if ('overall' in sheet_lower or
                 'oil' in sheet_lower or
                 'production' in sheet_lower):
             if 'water' not in sheet_lower and 'injection' not in sheet_lower:
-                ins, skip = ingest_oil_production(df, date, conn)
+                ins, skip = ingest_oil_production(
+                    df, date, conn, net_oil_bbl=net_oil_bbl)
                 total_inserted += ins
                 total_skipped  += skip
 
-        # Water injection — ONLY process Base sheet
-        # Water Injection_Sheet (daily summary) is ignored
-        # Water Injection Sheet (Base) has full historical data with dates
+        # Water injection — ONLY Base sheet
         elif ('water' in sheet_lower or
               'injection' in sheet_lower or
               'wi' in sheet_lower):
@@ -594,7 +624,7 @@ def process_single_file(file_info, conn):
                 total_inserted += ins
                 total_skipped  += skip
             else:
-                print(f"      ⏭️  Skipping sheet '{sheet}' — only Base sheet ingested")
+                print(f"      ⏭️  Skipping '{sheet}' — only Base sheet ingested")
 
     return total_inserted, total_skipped
 
