@@ -28,15 +28,15 @@ def get_base64_image(path):
 
 bg   = get_base64_image("offshore_pics.jpg")
 logo = get_base64_image("ongc_logo.jpg")
+bg_url   = f'url("data:image/jpeg;base64,{bg}")'  if bg   else "none"
+logo_src = f'data:image/jpeg;base64,{logo}'        if logo else ""
 
-bg_url   = f'url("data:image/jpeg;base64,{bg}")'   if bg   else "none"
-logo_src = f'data:image/jpeg;base64,{logo}'         if logo else ""
-
-# ── STYLES ────────────────────────────────────────────────────────────────────
+# ── GLOBAL STYLES ─────────────────────────────────────────────────────────────
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap');
 
+/* BACKGROUND */
 .stApp {{
     background-image: linear-gradient(rgba(0,0,0,0.60),rgba(0,10,30,0.72)), {bg_url};
     background-size: cover;
@@ -44,30 +44,36 @@ st.markdown(f"""
     background-attachment: fixed;
 }}
 
-[data-testid="stSidebar"]      {{ display: none !important; }}
+/* HIDE SIDEBAR */
+[data-testid="stSidebar"]       {{ display: none !important; }}
 [data-testid="collapsedControl"] {{ display: none !important; }}
 
 /* NAVBAR */
 .navbar {{
-    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
-    background: rgba(0,8,24,0.92); backdrop-filter: blur(14px);
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: rgba(0,8,24,0.92);
+    backdrop-filter: blur(14px);
     border-bottom: 1px solid rgba(0,180,216,0.25);
     display: flex; align-items: center;
     height: 54px; padding: 0 20px; gap: 4px;
+    pointer-events: none;
 }}
-.nb-brand {{ display:flex; align-items:center; gap:8px; margin-right:24px; }}
-.nb-brand img {{ height:34px; width:auto; border-radius:4px; }}
+.nb-brand {{
+    display:flex; align-items:center; gap:8px; margin-right:20px;
+}}
+.nb-brand img {{ height:32px; width:auto; border-radius:4px; }}
 .nb-brand-text {{
-    font-family:'Rajdhani',sans-serif; font-size:17px; font-weight:700;
+    font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700;
     color:#fff; letter-spacing:1px; white-space:nowrap;
 }}
 .nb-item {{
-    font-family:'Inter',sans-serif; font-size:13px; font-weight:500;
-    color:rgba(144,224,239,0.75); padding:6px 13px; border-radius:6px;
+    font-family:'Inter',sans-serif; font-size:12px; font-weight:500;
+    color:rgba(144,224,239,0.75); padding:5px 11px; border-radius:6px;
     white-space:nowrap;
 }}
 .nb-item.active {{
-    color:#fff; background:rgba(0,180,216,0.22);
+    color:#fff;
+    background:rgba(0,180,216,0.22);
     border:1px solid rgba(0,180,216,0.4);
 }}
 .nb-spacer {{ flex:1; }}
@@ -76,9 +82,11 @@ st.markdown(f"""
     color:rgba(144,224,239,0.5); white-space:nowrap;
 }}
 
-/* PUSH CONTENT BELOW NAVBAR */
+/* CONTENT PADDING — pushes below navbar */
 .main .block-container {{
-    padding-top: 72px !important;
+    padding-top: 70px !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
     animation: fadeIn 0.35s ease;
 }}
 @keyframes fadeIn {{
@@ -86,29 +94,34 @@ st.markdown(f"""
     to   {{ opacity:1; transform:translateY(0); }}
 }}
 
-/* INVISIBLE CLICK LAYER — sits over navbar, handles navigation */
-div[data-testid="stHorizontalBlock"] {{
-    position: fixed !important; top: 0 !important;
-    left: 0 !important; right: 0 !important;
-    z-index: 10000 !important; height: 54px !important;
-    opacity: 0 !important; gap: 0 !important;
-    margin: 0 !important; padding: 0 !important;
-    pointer-events: auto !important;
+/* NAV BUTTONS — invisible layer covering navbar exactly */
+.nav-btn-row {{
+    position: fixed !important;
+    top: 0 !important; left: 160px !important; right: 160px !important;
+    z-index: 1001 !important;
+    height: 54px !important;
+    display: flex !important;
 }}
-div[data-testid="stHorizontalBlock"] > div {{
-    flex: 1 !important; height: 54px !important;
-    padding: 0 !important; margin: 0 !important;
+.nav-btn-row > div[data-testid="column"] {{
+    flex: 1 !important;
+    height: 54px !important;
+    padding: 0 !important;
 }}
-div[data-testid="stHorizontalBlock"] button {{
-    width: 100% !important; height: 54px !important;
+.nav-btn-row button {{
+    width: 100% !important;
+    height: 54px !important;
+    opacity: 0 !important;
     border-radius: 0 !important;
+    border: none !important;
+    cursor: pointer !important;
 }}
 
 /* METRIC CARDS */
 [data-testid="stMetric"] {{
     background: rgba(255,255,255,0.05) !important;
     border: 1px solid rgba(0,180,216,0.22) !important;
-    border-radius: 10px !important; padding: 14px !important;
+    border-radius: 10px !important;
+    padding: 14px !important;
     backdrop-filter: blur(8px) !important;
     transition: all 0.25s ease !important;
 }}
@@ -121,7 +134,7 @@ div[data-testid="stHorizontalBlock"] button {{
 [data-testid="stMetricLabel"] {{
     color: #90e0ef !important;
     font-family: 'Inter', sans-serif !important;
-    font-size: 11px !important; letter-spacing: 0.4px !important;
+    font-size: 11px !important;
 }}
 [data-testid="stMetricValue"] {{
     color: #fff !important;
@@ -129,11 +142,13 @@ div[data-testid="stHorizontalBlock"] button {{
     font-size: 1.9rem !important; font-weight: 600 !important;
 }}
 
+/* HEADINGS */
 h1,h2,h3 {{ font-family:'Rajdhani',sans-serif !important; letter-spacing:1px !important; }}
 h1 {{ color:#fff !important; font-weight:700 !important; }}
 h2 {{ color:#90e0ef !important; font-weight:600 !important; }}
 h3 {{ color:#caf0f8 !important; font-weight:500 !important; }}
 
+/* DATAFRAME */
 [data-testid="stDataFrame"] {{
     background: rgba(255,255,255,0.03) !important;
     border: 1px solid rgba(0,180,216,0.13) !important;
@@ -148,6 +163,7 @@ hr {{ border-color: rgba(0,180,216,0.18) !important; }}
 
 .stCaption {{ color: rgba(144,224,239,0.65) !important; }}
 
+/* LIGHT MODE */
 @media (prefers-color-scheme: light) {{
     .stApp {{
         background-image: linear-gradient(rgba(255,255,255,0.68),rgba(220,240,255,0.72)), {bg_url};
@@ -181,7 +197,7 @@ PAGES = [
 if 'page' not in st.session_state:
     st.session_state.page = "Field Overview"
 
-# ── VISUAL NAVBAR (decorative, shows active state) ────────────────────────────
+# ── STEP 1: Render visual navbar ──────────────────────────────────────────────
 nav_html = ""
 for icon, name in PAGES:
     cls = "nb-item active" if st.session_state.page == name else "nb-item"
@@ -191,14 +207,20 @@ logo_html = f'<img src="{logo_src}" />' if logo_src else "⚡"
 
 st.markdown(f"""
 <div class="navbar">
-    <div class="nb-brand">{logo_html}<span class="nb-brand-text">OIL FIELD</span></div>
+    <div class="nb-brand">
+        {logo_html}
+        <span class="nb-brand-text">OIL FIELD</span>
+    </div>
     {nav_html}
     <div class="nb-spacer"></div>
     <span class="nb-time">🕐 {datetime.now().strftime('%d-%b-%Y %H:%M')}</span>
 </div>
 """, unsafe_allow_html=True)
 
-# ── INVISIBLE CLICK LAYER (functional, handles page switching) ────────────────
+# ── STEP 2: Invisible Streamlit buttons over navbar ───────────────────────────
+# These are the actual clickable elements
+# CSS positions them over the navbar items
+st.markdown('<div class="nav-btn-row">', unsafe_allow_html=True)
 cols = st.columns(len(PAGES))
 for i, (icon, name) in enumerate(PAGES):
     with cols[i]:
@@ -206,6 +228,7 @@ for i, (icon, name) in enumerate(PAGES):
                      use_container_width=True):
             st.session_state.page = name
             st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
 
 page = st.session_state.page
 
@@ -248,7 +271,8 @@ def load_latest_production():
 
 def load_production_trend(days=30):
     conn = get_connection()
-    df = pd.read_sql("""SELECT date, SUM(oil_rate_bpd) as total_oil,
+    df = pd.read_sql("""SELECT date,
+        SUM(oil_rate_bpd) as total_oil,
         SUM(liquid_rate_bpd) as total_liquid,
         SUM(production_loss_bbl) as total_loss
         FROM oil_production GROUP BY date ORDER BY date""", conn)
@@ -300,7 +324,8 @@ def load_water_injection():
 
 def load_water_injection_trend(days=90):
     conn = get_connection()
-    df = pd.read_sql("""SELECT date, SUM(flow_rate_bpd) as total_bpd,
+    df = pd.read_sql("""SELECT date,
+        SUM(flow_rate_bpd) as total_bpd,
         SUM(cumulative_flow_bbl) as cumulative
         FROM water_injection GROUP BY date ORDER BY date""", conn)
     conn.close()
@@ -311,7 +336,7 @@ def load_water_injection_trend(days=90):
 # ══════════════════════════════════════════════════════════════════════════════
 if page == "Field Overview":
     st.title("🛢️ Oil Field — Production Overview")
-    prod_df = load_latest_production()
+    prod_df     = load_latest_production()
     pressure_df = load_latest_pressure()
 
     if prod_df.empty:
@@ -320,13 +345,13 @@ if page == "Field Overview":
 
     st.caption(f"📅 Data as of: {prod_df['date'].max()}")
 
-    total_oil    = prod_df['oil_rate_bpd'].sum()
-    total_liquid = prod_df['liquid_rate_bpd'].sum()
-    total_loss   = prod_df['production_loss_bbl'].sum()
+    total_oil     = prod_df['oil_rate_bpd'].sum()
+    total_liquid  = prod_df['liquid_rate_bpd'].sum()
+    total_loss    = prod_df['production_loss_bbl'].sum()
     wells_flowing = len(prod_df[prod_df['well_status'].str.contains(
         'Flowing', na=False, case=False)])
-    wells_total  = len(prod_df)
-    wells_down   = len(prod_df[prod_df['well_status'].str.contains(
+    wells_total   = len(prod_df)
+    wells_down    = len(prod_df[prod_df['well_status'].str.contains(
         'Non|Workover|Failure', na=False, case=False)])
 
     c1,c2,c3,c4,c5 = st.columns(5)
@@ -352,14 +377,17 @@ if page == "Field Overview":
     if not pressure_df.empty:
         pr = pressure_df.iloc[0]
         plat['Line_Pressure_KSC'] = plat['platform'].map({
-            'R-7A': pr.get('r7a_r10a_lp'), 'R-10A': pr.get('r10a_mlp'),
-            'R-9A': pr.get('r9a_r10a_lp'), 'R-12A': pr.get('r12a_hra_lp'),
-            'R-12B': pr.get('r12b_mlp'),    'R-13A': pr.get('r13a_r10a_lp'),
+            'R-7A':  pr.get('r7a_r10a_lp'),
+            'R-10A': pr.get('r10a_mlp'),
+            'R-9A':  pr.get('r9a_r10a_lp'),
+            'R-12A': pr.get('r12a_hra_lp'),
+            'R-12B': pr.get('r12b_mlp'),
+            'R-13A': pr.get('r13a_r10a_lp'),
         })
 
     st.dataframe(plat.style.format({
-        'Oil_BOPD':'{:,.0f}', 'Liquid_BLPD':'{:,.0f}',
-        'Loss_BBL':'{:,.0f}', 'Line_Pressure_KSC':'{:.1f}'}),
+        'Oil_BOPD':'{:,.0f}','Liquid_BLPD':'{:,.0f}',
+        'Loss_BBL':'{:,.0f}','Line_Pressure_KSC':'{:.1f}'}),
         use_container_width=True, hide_index=True)
 
     st.divider()
@@ -389,8 +417,9 @@ if page == "Field Overview":
     st.subheader("🔍 Well Level Detail")
     pf = st.selectbox("Filter by Platform", ['All'] + PLATFORMS)
     fdf = prod_df if pf == 'All' else prod_df[prod_df['platform'] == pf]
-    dcols = [c for c in ['platform','well_name','liquid_rate_bpd','oil_rate_bpd',
-             'production_loss_bbl','well_status','remarks'] if c in fdf.columns]
+    dcols = [c for c in ['platform','well_name','liquid_rate_bpd',
+             'oil_rate_bpd','production_loss_bbl','well_status','remarks']
+             if c in fdf.columns]
 
     def color_status(val):
         if pd.isna(val): return ''
@@ -415,11 +444,11 @@ elif page == "Production Trends":
         "SELECT MIN(date) as mn, MAX(date) as mx FROM oil_production",
         conn).iloc[0]
     conn.close()
-    mn, mx = pd.to_datetime(dr['mn']), pd.to_datetime(dr['mx'])
+    mn, mx   = pd.to_datetime(dr['mn']), pd.to_datetime(dr['mx'])
     max_days = max(1, (mx - mn).days + 1)
     st.caption(f"📅 {mn.strftime('%d-%b-%Y')} to {mx.strftime('%d-%b-%Y')} ({max_days} days)")
 
-    days = st.slider("Time range (days)", 1, max_days, min(30, max_days))
+    days  = st.slider("Time range (days)", 1, max_days, min(30, max_days))
     trend = load_production_trend(days)
     if trend.empty:
         st.warning("No data available.")
@@ -443,8 +472,7 @@ elif page == "Production Trends":
         xaxis_title='Date', yaxis_title='Barrels',
         legend=dict(orientation='h', yanchor='bottom', y=1.02),
         xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45))
-    fig.update_xaxes(**GRID)
-    fig.update_yaxes(**GRID)
+    fig.update_xaxes(**GRID); fig.update_yaxes(**GRID)
     st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Platform wise Oil Trend")
@@ -455,8 +483,7 @@ elif page == "Production Trends":
                        title='Oil by Platform', markers=True)
         fig2.update_layout(**CHART, height=380,
                            xaxis=dict(tickformat='%d-%b-%Y', tickangle=-45))
-        fig2.update_xaxes(**GRID)
-        fig2.update_yaxes(**GRID)
+        fig2.update_xaxes(**GRID); fig2.update_yaxes(**GRID)
         st.plotly_chart(fig2, use_container_width=True)
 
     st.subheader("📋 Daily Summary")
@@ -478,21 +505,21 @@ elif page == "ESP Health":
         st.stop()
 
     wells = sorted(esp_df['well_name'].unique().tolist())
-    sel = st.selectbox("Select Well", wells)
+    sel   = st.selectbox("Select Well", wells)
 
     wdf = esp_df[esp_df['well_name'] == sel].copy()
     wdf['timestamp'] = pd.to_datetime(wdf['timestamp'])
-    wdf = wdf.sort_values('timestamp')
+    wdf    = wdf.sort_values('timestamp')
     latest = wdf.iloc[-1]
 
-    nc = ['motor_temp_1_c','vfd_output_frequency_hz',
-          'pump_discharge_pressure_psi','pump_intake_pressure_psi',
-          'motor_load_pct','motor_current_avg_amp',
-          'motor_current_a_amp','motor_current_b_amp','motor_current_c_amp',
-          'pump_intake_temp_c','vibration_x','vibration_y']
+    nc    = ['motor_temp_1_c','vfd_output_frequency_hz',
+             'pump_discharge_pressure_psi','pump_intake_pressure_psi',
+             'motor_load_pct','motor_current_avg_amp',
+             'motor_current_a_amp','motor_current_b_amp','motor_current_c_amp',
+             'pump_intake_temp_c','vibration_x','vibration_y']
     avail = [c for c in nc if c in wdf.columns]
-    rs = (wdf.set_index('timestamp')[avail]
-          .resample('12h').mean().dropna(how='all').reset_index())
+    rs    = (wdf.set_index('timestamp')[avail]
+             .resample('12h').mean().dropna(how='all').reset_index())
 
     st.subheader(f"Latest Reading — {sel}")
     c1,c2,c3,c4 = st.columns(4)
@@ -502,15 +529,16 @@ elif page == "ESP Health":
     c4.metric("🔌 Motor Current (A)",  format_metric(latest.get('motor_current_avg_amp')))
 
     c5,c6,c7,c8 = st.columns(4)
-    c5.metric("⬆️ Discharge (psi)",    format_metric(latest.get('pump_discharge_pressure_psi')))
-    c6.metric("⬇️ Intake (psi)",       format_metric(latest.get('pump_intake_pressure_psi')))
-    c7.metric("🌡️ Intake Temp (°C)",   format_metric(latest.get('pump_intake_temp_c')))
-    c8.metric("📳 Vibration X",        format_metric(latest.get('vibration_x'), decimals=3))
+    c5.metric("⬆️ Discharge (psi)",  format_metric(latest.get('pump_discharge_pressure_psi')))
+    c6.metric("⬇️ Intake (psi)",     format_metric(latest.get('pump_intake_pressure_psi')))
+    c7.metric("🌡️ Intake Temp (°C)", format_metric(latest.get('pump_intake_temp_c')))
+    c8.metric("📳 Vibration X",      format_metric(latest.get('vibration_x'), decimals=3))
 
     st.divider()
-    st.caption(f"📊 12-hourly averages | Raw: {len(wdf):,} | Chart: {len(rs):,} | "
-               f"{wdf['timestamp'].min().strftime('%d-%b-%Y')} → "
-               f"{wdf['timestamp'].max().strftime('%d-%b-%Y')}")
+    st.caption(
+        f"📊 12-hourly averages | Raw: {len(wdf):,} | Chart: {len(rs):,} | "
+        f"{wdf['timestamp'].min().strftime('%d-%b-%Y')} → "
+        f"{wdf['timestamp'].max().strftime('%d-%b-%Y')}")
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=rs['timestamp'], y=rs['motor_temp_1_c'],
@@ -617,10 +645,10 @@ elif page == "Water Injection":
         "SELECT MIN(date) as mn, MAX(date) as mx FROM water_injection",
         conn).iloc[0]
     conn.close()
-    wmin = pd.to_datetime(wr['mn']); wmax = pd.to_datetime(wr['mx'])
+    wmin  = pd.to_datetime(wr['mn']); wmax = pd.to_datetime(wr['mx'])
     wdays = max(1, (wmax - wmin).days + 1)
-    days = st.slider("Days to show", 1, wdays, min(90, wdays))
-    wt = load_water_injection_trend(days)
+    days  = st.slider("Days to show", 1, wdays, min(90, wdays))
+    wt    = load_water_injection_trend(days)
     if not wt.empty:
         wt['date'] = pd.to_datetime(wt['date']).dt.normalize()
         fig = px.line(wt, x='date', y='total_bpd',
@@ -641,12 +669,12 @@ elif page == "Pressure Analysis":
         "SELECT MIN(timestamp) as mn, MAX(timestamp) as mx FROM pressure_data",
         conn).iloc[0]
     conn.close()
-    pmn = pd.to_datetime(pr['mn']); pmx = pd.to_datetime(pr['mx'])
+    pmn   = pd.to_datetime(pr['mn']); pmx = pd.to_datetime(pr['mx'])
     pdays = max(1, (pmx - pmn).days + 1)
     st.caption(f"📅 {pmn.strftime('%d-%b-%Y')} to {pmx.strftime('%d-%b-%Y')}")
 
     days = st.slider("Time range (days)", 7, pdays, min(30, pdays))
-    pdf = load_pressure_trend(days)
+    pdf  = load_pressure_trend(days)
     if pdf.empty:
         st.warning("No pressure data.")
         st.stop()
@@ -714,7 +742,8 @@ elif page == "Early Warning":
     alerts = []
     esp_df = load_esp_data()
     if not esp_df.empty:
-        le = esp_df.sort_values('timestamp').groupby('well_name').last().reset_index()
+        le = esp_df.sort_values('timestamp').groupby(
+            'well_name').last().reset_index()
         for _, row in le.iterrows():
             temp = row.get('motor_temp_1_c')
             it   = row.get('pump_intake_temp_c')
@@ -773,9 +802,11 @@ elif page == "Early Warning":
         for col in prf.select_dtypes(include='number').columns:
             prf[col] = prf[col].where(prf[col] <= 200, other=None)
         for col,label in [
-            ('r7a_r10a_lp','R7A Launcher'),('r9a_r10a_lp','R9A Launcher'),
+            ('r7a_r10a_lp','R7A Launcher'),
+            ('r9a_r10a_lp','R9A Launcher'),
             ('r13a_r10a_lp','R13A Launcher'),
-            ('r10a_hra_lp','R10A→HRA'),('r12a_hra_lp','R12A→HRA')]:
+            ('r10a_hra_lp','R10A→HRA'),
+            ('r12a_hra_lp','R12A→HRA')]:
             if col in prf.columns:
                 rc = prf[col].dropna()
                 if len(rc) >= 4:
