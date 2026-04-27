@@ -553,7 +553,7 @@ if page == "Field Overview":
             change_html=loss_html
         ), unsafe_allow_html=True)
 
-   with c4:
+    with c4:
         st.markdown(kpi_card(
             "Wells Flowing",
             f"{wells_flowing} / {wells_total}",
