@@ -392,12 +392,12 @@ st.markdown(f"""
 
 # Navigation pages
 PAGES = [
-    ("🏠", "Field Overview"),
-    ("📈", "Production Trends"),
-    ("🔧", "ESP Health"),
-    ("💧", "Water Injection"),
-    ("📊", "Pressure Analysis"),
-    ("⚠️", "Early Warning"),
+    ("Field Overview"),
+    ("Production Trends"),
+    ("ESP Health"),
+    ("Water Injection"),
+    ("Pressure Analysis"),
+    ("Early Warning"),
 ]
 
 # Use query params to track active page
@@ -468,7 +468,7 @@ page = st.session_state.page
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — FIELD OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
-if page == "🏠 Field Overview":
+if page == "Field Overview":
     st.title("🛢️ Oil Field — Production Overview")
 
     prod_df     = load_latest_production()
@@ -613,8 +613,8 @@ if page == "🏠 Field Overview":
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 2 — PRODUCTION TRENDS
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "📈 Production Trends":
-    st.title("📈 Production Trends")
+elif page == " Production Trends":
+    st.title(" Production Trends")
 
     conn     = get_connection()
     date_rng = pd.read_sql(
@@ -708,8 +708,8 @@ elif page == "📈 Production Trends":
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 3 — ESP HEALTH
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "🔧 ESP Health":
-    st.title("🔧 ESP Health Monitor")
+elif page == "ESP Health":
+    st.title("ESP Health Monitor")
 
     esp_df = load_esp_data()
     if esp_df.empty:
@@ -886,8 +886,8 @@ elif page == "🔧 ESP Health":
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 4 — WATER INJECTION
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "💧 Water Injection":
-    st.title("💧 Water Injection Summary")
+elif page == "Water Injection":
+    st.title("Water Injection Summary")
 
     wi_df = load_water_injection()
     if wi_df.empty:
@@ -948,8 +948,8 @@ elif page == "💧 Water Injection":
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 5 — PRESSURE ANALYSIS
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "📊 Pressure Analysis":
-    st.title("📊 Pipeline Pressure Analysis")
+elif page == "Pressure Analysis":
+    st.title("Pipeline Pressure Analysis")
 
     conn      = get_connection()
     pr_range  = pd.read_sql(
@@ -1052,8 +1052,8 @@ elif page == "📊 Pressure Analysis":
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE 6 — EARLY WARNING
 # ══════════════════════════════════════════════════════════════════════════════
-elif page == "⚠️ Early Warning":
-    st.title("⚠️ Early Warning System")
+elif page == "Early Warning":
+    st.title("Early Warning System")
     st.caption("Automated alerts based on threshold monitoring")
 
     alerts = []
