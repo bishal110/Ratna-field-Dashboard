@@ -393,7 +393,7 @@ def ingest_oil_production(df_sheet, date, conn, net_oil_bbl=None):
             if remarks     in ['nan', 'None', '-']: remarks     = None
 
             conn.execute("""
-                INSERT OR IGNORE INTO oil_production
+                INSERT OR REPLACE INTO oil_production
                 (date, platform, well_name, liquid_rate_bpd, oil_rate_bpd,
                 production_loss_bbl, well_status, remarks, net_oil_bbl)
                 VALUES (?,?,?,?,?,?,?,?,?)
