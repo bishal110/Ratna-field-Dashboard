@@ -5,8 +5,6 @@ Outputs:
 - esp_events_r9a
 """
 
-# updated new and pushed again
-
 from __future__ import annotations
 
 import sqlite3
@@ -71,18 +69,6 @@ def find_r9a_file() -> Path:
     if LOGGING.get("print_discovered_file", True):
         print(f"[INFO] R9A file found: {chosen}")
     return chosen
-
-
-
-
-def _coerce_datetime(date_series: pd.Series, time_series: pd.Series | None = None) -> pd.Series:
-    """Robust datetime parser handling Excel serial dates + mixed text formats."""
-    dnum = pd.to_numeric(date_series, errors="coerce")
-    excel_dt = pd.to_datetime(dnum, unit="D", origin="1899-12-30", errors="coerce")
-    dtext = date_series.astype(str).str.strip()
-    ttext = time_series.astype(str).str.strip() if time_series is not None else "00:00:00"
-    mixed = pd.to_datetime(dtext + " " + ttext, **DATE_PARSE_SETTINGS)
-    return excel_dt.fillna(mixed)
 
 
 def _find_alias_column(columns: List[str], aliases: List[str]) -> Optional[str]:
@@ -176,7 +162,7 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
     df = pd.DataFrame()
     date_str = raw[mapped["date"]].astype(str).str.strip()
     time_str = raw[mapped["time"]].astype(str).str.strip() if "time" in mapped else "00:00:00"
-    dt = _coerce_datetime(raw[mapped["date"]], raw[mapped["time"]] if "time" in mapped else None)
+    dt = pd.to_datetime(date_str + " " + time_str, **DATE_PARSE_SETTINGS)
     df["timestamp"] = dt
     df["well_name"] = _normalize_well_name(well_name) or well_name
 
@@ -238,8 +224,8 @@ def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: L
 
     ev = pd.DataFrame()
     ev["well_name"] = _normalize_well_name(well_name) or well_name
-    ev["stop_dt"] = _coerce_datetime(raw[mapped["stop_dt"]], None)
-    ev["start_dt"] = _coerce_datetime(raw[mapped.get("start_dt")], None) if "start_dt" in mapped else pd.NaT
+    ev["stop_dt"] = pd.to_datetime(raw[mapped["stop_dt"]], **DATE_PARSE_SETTINGS)
+    ev["start_dt"] = pd.to_datetime(raw[mapped.get("start_dt")], **DATE_PARSE_SETTINGS) if "start_dt" in mapped else pd.NaT
     ev["run_hours"] = pd.to_numeric(raw[mapped.get("run_hours")], errors="coerce") if "run_hours" in mapped else None
     ev["shutdown_hours"] = pd.to_numeric(raw[mapped.get("shutdown_hours")], errors="coerce") if "shutdown_hours" in mapped else None
     ev["reason_text"] = raw[mapped.get("reason_text")].astype(str).fillna("") if "reason_text" in mapped else ""
@@ -288,18 +274,6 @@ def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     if not events_df.empty:
         events_df = events_df.sort_values(["well_name", "stop_dt"]).reset_index(drop=True)
-
-    if esp_df.empty and len(esp_df.columns) == 0:
-        esp_df = pd.DataFrame(columns=[
-            "timestamp", "well_name", "frequency_hz", "esm_active_current_amps", "total_esm_current_amps",
-            "pi_psia", "pd_psia", "ti_c", "tm_c", "vibration_vx", "vibration_vy", "vibration_vz",
-            "current_ia", "current_ib", "current_ic", "sec_pressure_a", "sec_pressure_b", "sec_pressure_c",
-            "header_pressure_bar", "fthp_kgcm2", "fat_c", "motor_load_pct", "choke_size_in", "remarks",
-        ])
-    if events_df.empty and len(events_df.columns) == 0:
-        events_df = pd.DataFrame(columns=[
-            "well_name", "stop_dt", "start_dt", "run_hours", "shutdown_hours", "reason_text", "failure_label", "duration_hrs"
-        ])
 
     with sqlite3.connect(DB_PATH) as conn:
         esp_df.to_sql(TABLE_NAMES["esp_raw"], conn, if_exists="replace", index=False)
