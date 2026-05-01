@@ -11,11 +11,19 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+import warnings
 from fractions import Fraction
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
+
+# Reduce noisy pandas warning for mixed datetime text parsing
+warnings.filterwarnings(
+    "ignore",
+    message="Could not infer format, so each element will be parsed individually",
+    category=UserWarning,
+)
 
 if __package__ is None or __package__ == "":
     sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -84,7 +92,6 @@ def _coerce_datetime(date_series: pd.Series, time_series: pd.Series | None = Non
     else:
         ttext = "00:00:00"
 
-    # Keep fallback parse, but avoid noisy warning spam by suppressing invalid pieces naturally
     mixed = pd.to_datetime(dtext + " " + ttext, **DATE_PARSE_SETTINGS)
     return excel_dt.fillna(mixed)
 
@@ -159,8 +166,18 @@ def _detect_header_row(preview_df: pd.DataFrame, anchor_terms: List[str]) -> int
 
 
 def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Optional[str]:
+    """
+    Resolve sheet robustly for each well.
+    Handles both R9A#1 and R9A1 style naming.
+    """
     patterns = [_normalize_name(p) for p in SHEET_MATCH_RULES[kind][well]]
-    well_token = _normalize_name(well).replace("#", "")
+
+    well_norm = _normalize_name(well)          # e.g. r9a#1
+    well_token_hash = well_norm                # r9a#1
+    well_token_nohash = well_norm.replace("#", "")  # r9a1
+
+    def has_well_token(s_norm: str) -> bool:
+        return (well_token_hash in s_norm) or (well_token_nohash in s_norm)
 
     # strict pass
     for s in sheet_names:
@@ -170,15 +187,15 @@ def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Opt
             # exclude summary/start-stop for ESP data tabs
             if "summary" in s_norm or "start stop" in s_norm or "start_stop" in s_norm:
                 continue
-            # require well token in tab
-            if well_token not in s_norm:
+            # require well token
+            if not has_well_token(s_norm):
                 continue
 
         if kind == "start_stop_sheets":
-            # must be a start-stop tab and must contain well token
+            # must be start-stop and must contain well token
             if ("start stop" not in s_norm and "start_stop" not in s_norm):
                 continue
-            if well_token not in s_norm:
+            if not has_well_token(s_norm):
                 continue
 
         if any(p in s_norm for p in patterns):
@@ -191,17 +208,17 @@ def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Opt
         if kind == "esp_parameter_sheets":
             if "summary" in s_norm or "start stop" in s_norm or "start_stop" in s_norm:
                 continue
-            if well_token in s_norm:
+            if has_well_token(s_norm):
                 return s
 
         if kind == "start_stop_sheets":
-            if ("start stop" in s_norm or "start_stop" in s_norm) and well_token in s_norm:
+            if ("start stop" in s_norm or "start_stop" in s_norm) and has_well_token(s_norm):
                 return s
 
     return None
 
 
-def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: List[str]) -> pd.DataFrame:
+def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings_list: List[str]) -> pd.DataFrame:
     preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=120)
     header_row = _detect_header_row(preview, ESP_COLUMN_ALIASES["date"])
 
@@ -214,10 +231,10 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
         if col:
             mapped[out_col] = col
 
-    # IMPORTANT: only date is mandatory; time can be absent
+    # only date is mandatory
     missing_critical = [k for k in ["date"] if k not in mapped]
     if missing_critical:
-        warnings.append(f"[{well_name}] Missing critical columns in {sheet}: {missing_critical}")
+        warnings_list.append(f"[{well_name}] Missing critical columns in {sheet}: {missing_critical}")
         return pd.DataFrame()
 
     df = pd.DataFrame()
@@ -266,7 +283,7 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
     return df
 
 
-def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: List[str]) -> pd.DataFrame:
+def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings_list: List[str]) -> pd.DataFrame:
     preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=120)
     header_row = _detect_header_row(preview, EVENT_COLUMN_ALIASES["stop_dt"])
 
@@ -284,7 +301,7 @@ def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: L
         if fallback_stop:
             mapped["stop_dt"] = fallback_stop
         else:
-            warnings.append(f"[{well_name}] Missing stop datetime column in {sheet}")
+            warnings_list.append(f"[{well_name}] Missing stop datetime column in {sheet}")
             return pd.DataFrame()
 
     ev = pd.DataFrame()
@@ -310,7 +327,7 @@ def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: L
 
 
 def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
-    warnings: List[str] = []
+    warnings_list: List[str] = []
     file_path = find_r9a_file()
     xls = pd.ExcelFile(file_path)
     sheet_names = xls.sheet_names
@@ -321,15 +338,15 @@ def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
     for well in CANONICAL_WELLS:
         esp_sheet = _resolve_sheet_for_well(sheet_names, well, "esp_parameter_sheets")
         if esp_sheet:
-            esp_frames.append(_load_esp_sheet(xls, esp_sheet, well, warnings))
+            esp_frames.append(_load_esp_sheet(xls, esp_sheet, well, warnings_list))
         else:
-            warnings.append(f"ESP sheet not found for {well}")
+            warnings_list.append(f"ESP sheet not found for {well}")
 
         event_sheet = _resolve_sheet_for_well(sheet_names, well, "start_stop_sheets")
         if event_sheet:
-            event_frames.append(_load_event_sheet(xls, event_sheet, well, warnings))
+            event_frames.append(_load_event_sheet(xls, event_sheet, well, warnings_list))
         else:
-            warnings.append(f"Event sheet not found for {well}")
+            warnings_list.append(f"Event sheet not found for {well}")
 
     esp_df = pd.concat(esp_frames, ignore_index=True) if esp_frames else pd.DataFrame()
     events_df = pd.concat(event_frames, ignore_index=True) if event_frames else pd.DataFrame()
@@ -379,9 +396,9 @@ def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
     else:
         print("No event rows ingested.")
 
-    if warnings:
+    if warnings_list:
         print("Parsing warnings:")
-        for w in warnings[: LOGGING.get("max_warning_samples", 50)]:
+        for w in warnings_list[: LOGGING.get("max_warning_samples", 50)]:
             print(f" - {w}")
 
     return esp_df, events_df
