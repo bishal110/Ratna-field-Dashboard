@@ -32,27 +32,23 @@ def _ensure_core_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out.columns = [str(c).strip() for c in out.columns]
 
-    # Ensure well_name exists
-    if "well_name" not in out.columns:
-        # try case-insensitive recovery
-        lc_map = {c.lower(): c for c in out.columns}
-        if "well_name" in lc_map:
-            out = out.rename(columns={lc_map["well_name"]: "well_name"})
-        else:
-            raise KeyError("well_name column missing in apply_virtual_sensors input")
+    lc_map = {c.lower(): c for c in out.columns}
 
-    # Ensure timestamp exists
+    if "well_name" not in out.columns and "well_name" in lc_map:
+        out = out.rename(columns={lc_map["well_name"]: "well_name"})
     if "timestamp" not in out.columns:
-        lc_map = {c.lower(): c for c in out.columns}
         for cand in ["timestamp", "datetime", "date_time", "time_stamp"]:
             if cand in lc_map:
                 out = out.rename(columns={lc_map[cand]: "timestamp"})
                 break
 
+    if "well_name" not in out.columns:
+        raise KeyError("well_name column missing in apply_virtual_sensors input")
     if "timestamp" not in out.columns:
         raise KeyError("timestamp column missing in apply_virtual_sensors input")
 
     out["timestamp"] = pd.to_datetime(out["timestamp"], errors="coerce")
+    out = out.dropna(subset=["timestamp", "well_name"]).copy()
     return out
 
 
@@ -63,14 +59,12 @@ def apply_virtual_sensors(esp_df: pd.DataFrame) -> pd.DataFrame:
     out = _ensure_core_columns(esp_df)
     out = out.sort_values(["well_name", "timestamp"]).reset_index(drop=True)
 
-    # Create source/confidence columns
     for col in ["pi_psia", "tm_c", "current_ia", "current_ib", "current_ic"]:
         if col not in out.columns:
             out[col] = np.nan
         out[f"{col}_source"] = "measured"
         out[f"{col}_confidence"] = CONFIDENCE_WEIGHTS["measured"]
 
-    # Ensure required numeric cols exist
     for col in ["pd_psia", "frequency_hz", "ti_c", "motor_load_pct", "current_ia", "current_ib", "current_ic"]:
         if col not in out.columns:
             out[col] = np.nan
@@ -78,31 +72,18 @@ def apply_virtual_sensors(esp_df: pd.DataFrame) -> pd.DataFrame:
 
     processed_groups = []
 
-    for well, g in out.groupby("well_name", dropna=False):
+    for _, g in out.groupby("well_name", dropna=False):
         g = g.copy()
 
         k_pump = _fit_k_pump(g)
         delta_t_ref = _fit_delta_t_ref(g)
 
-        # Pi reconstruction
-        mask_pi = (
-            g["pi_psia"].isna()
-            & g["pd_psia"].notna()
-            & g["frequency_hz"].notna()
-            & pd.notna(k_pump)
-        )
+        mask_pi = g["pi_psia"].isna() & g["pd_psia"].notna() & g["frequency_hz"].notna() & pd.notna(k_pump)
         g.loc[mask_pi, "pi_psia"] = g.loc[mask_pi, "pd_psia"] - (k_pump * (g.loc[mask_pi, "frequency_hz"] ** 2))
         g.loc[mask_pi, "pi_psia_source"] = "virtual"
         g.loc[mask_pi, "pi_psia_confidence"] = CONFIDENCE_WEIGHTS["virtual_strong"]
 
-        # TM reconstruction
-        mask_tm = (
-            g["tm_c"].isna()
-            & g["ti_c"].notna()
-            & g["motor_load_pct"].notna()
-            & g["frequency_hz"].notna()
-            & pd.notna(delta_t_ref)
-        )
+        mask_tm = g["tm_c"].isna() & g["ti_c"].notna() & g["motor_load_pct"].notna() & g["frequency_hz"].notna() & pd.notna(delta_t_ref)
         g.loc[mask_tm, "tm_c"] = (
             g.loc[mask_tm, "ti_c"]
             + (g.loc[mask_tm, "motor_load_pct"] / 100.0)
@@ -112,13 +93,11 @@ def apply_virtual_sensors(esp_df: pd.DataFrame) -> pd.DataFrame:
         g.loc[mask_tm, "tm_c_source"] = "virtual"
         g.loc[mask_tm, "tm_c_confidence"] = CONFIDENCE_WEIGHTS["virtual_strong"]
 
-        # Phase current reconstruction
         phase_map = {
             "current_ia": ["current_ib", "current_ic"],
             "current_ib": ["current_ia", "current_ic"],
             "current_ic": ["current_ia", "current_ib"],
         }
-
         for phase, others in phase_map.items():
             m = g[phase].isna() & g[others[0]].notna() & g[others[1]].notna()
             g.loc[m, phase] = g.loc[m, others].mean(axis=1)
@@ -129,5 +108,4 @@ def apply_virtual_sensors(esp_df: pd.DataFrame) -> pd.DataFrame:
 
     final_df = pd.concat(processed_groups, ignore_index=True)
     final_df = final_df.sort_values(["well_name", "timestamp"]).reset_index(drop=True)
-
     return final_df
