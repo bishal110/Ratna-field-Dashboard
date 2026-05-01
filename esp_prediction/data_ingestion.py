@@ -40,7 +40,7 @@ from esp_prediction.config import (
 
 
 def _normalize_name(text: str) -> str:
-    return " ".join(str(text).strip().lower().replace("_", " ").split())
+    return " ".join(str(text).strip().lower().replace("_", " ").replace("\n", " ").split())
 
 
 def _normalize_well_name(raw: str) -> Optional[str]:
@@ -73,29 +73,38 @@ def find_r9a_file() -> Path:
     return chosen
 
 
-
-
 def _coerce_datetime(date_series: pd.Series, time_series: pd.Series | None = None) -> pd.Series:
     """Robust datetime parser handling Excel serial dates + mixed text formats."""
     dnum = pd.to_numeric(date_series, errors="coerce")
     excel_dt = pd.to_datetime(dnum, unit="D", origin="1899-12-30", errors="coerce")
+
     dtext = date_series.astype(str).str.strip()
-    ttext = time_series.astype(str).str.strip() if time_series is not None else "00:00:00"
+    if time_series is not None:
+        ttext = time_series.astype(str).str.strip()
+    else:
+        ttext = "00:00:00"
+
+    # Keep fallback parse, but avoid noisy warning spam by suppressing invalid pieces naturally
     mixed = pd.to_datetime(dtext + " " + ttext, **DATE_PARSE_SETTINGS)
     return excel_dt.fillna(mixed)
 
 
 def _find_alias_column(columns: List[str], aliases: List[str]) -> Optional[str]:
     normalized_map = {_normalize_name(c): c for c in columns}
+
+    # exact normalized match
     for alias in aliases:
         key = _normalize_name(alias)
         if key in normalized_map:
             return normalized_map[key]
+
+    # contains match
     for alias in aliases:
         alias_key = _normalize_name(alias)
         for key, original in normalized_map.items():
             if alias_key in key:
                 return original
+
     return None
 
 
@@ -106,16 +115,14 @@ def _split_triplet(val) -> Tuple[Optional[float], Optional[float], Optional[floa
     parts = [p.strip() for p in txt.split("/")]
     if len(parts) != 3:
         return (None, None, None)
-    out = []
-    for p in parts:
-        out.append(pd.to_numeric(p, errors="coerce"))
+    out = [pd.to_numeric(p, errors="coerce") for p in parts]
     return tuple(out)
 
 
 def _parse_choke(val):
     if pd.isna(val):
         return None
-    txt = str(val).strip()
+    txt = str(val).strip().replace('"', "")
     if txt in TEXT_AS_NAN_TOKENS:
         return None
     try:
@@ -138,46 +145,66 @@ def _detect_header_row(preview_df: pd.DataFrame, anchor_terms: List[str]) -> int
     """Find header row by scanning for known anchor terms in a row."""
     anchors = {_normalize_name(a) for a in anchor_terms}
     max_rows = min(len(preview_df), 120)
+
     for i in range(max_rows):
         row_vals = [_normalize_name(v) for v in preview_df.iloc[i].tolist()]
+        # exact token hit
         if any(a in row_vals for a in anchors):
             return i
+        # substring hit
         if any(any(a in cell for a in anchors) for cell in row_vals):
             return i
+
     return 0
 
 
 def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Optional[str]:
     patterns = [_normalize_name(p) for p in SHEET_MATCH_RULES[kind][well]]
+    well_token = _normalize_name(well).replace("#", "")
 
-    # strict pass first
+    # strict pass
     for s in sheet_names:
         s_norm = _normalize_name(s)
+
         if kind == "esp_parameter_sheets":
+            # exclude summary/start-stop for ESP data tabs
             if "summary" in s_norm or "start stop" in s_norm or "start_stop" in s_norm:
                 continue
-        if kind == "start_stop_sheets":
-            if "start stop" not in s_norm and "start_stop" not in s_norm:
+            # require well token in tab
+            if well_token not in s_norm:
                 continue
+
+        if kind == "start_stop_sheets":
+            # must be a start-stop tab and must contain well token
+            if ("start stop" not in s_norm and "start_stop" not in s_norm):
+                continue
+            if well_token not in s_norm:
+                continue
+
         if any(p in s_norm for p in patterns):
             return s
 
-    # fallback pass
-    well_token = _normalize_name(well).replace("#", "")
+    # fallback pass (still guarded)
     for s in sheet_names:
         s_norm = _normalize_name(s)
-        if well_token in s_norm:
-            if kind == "esp_parameter_sheets" and ("summary" in s_norm or "start stop" in s_norm or "start_stop" in s_norm):
+
+        if kind == "esp_parameter_sheets":
+            if "summary" in s_norm or "start stop" in s_norm or "start_stop" in s_norm:
                 continue
-            if kind == "start_stop_sheets" and ("start stop" not in s_norm and "start_stop" not in s_norm):
-                continue
-            return s
+            if well_token in s_norm:
+                return s
+
+        if kind == "start_stop_sheets":
+            if ("start stop" in s_norm or "start_stop" in s_norm) and well_token in s_norm:
+                return s
+
     return None
 
 
 def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: List[str]) -> pd.DataFrame:
-    preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=80)
+    preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=120)
     header_row = _detect_header_row(preview, ESP_COLUMN_ALIASES["date"])
+
     raw = pd.read_excel(xls, sheet_name=sheet, header=header_row)
     raw.columns = [str(c).strip() for c in raw.columns]
 
@@ -187,6 +214,7 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
         if col:
             mapped[out_col] = col
 
+    # IMPORTANT: only date is mandatory; time can be absent
     missing_critical = [k for k in ["date"] if k not in mapped]
     if missing_critical:
         warnings.append(f"[{well_name}] Missing critical columns in {sheet}: {missing_critical}")
@@ -194,6 +222,7 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
 
     df = pd.DataFrame()
     dt = _coerce_datetime(raw[mapped["date"]], raw[mapped["time"]] if "time" in mapped else None)
+
     df["timestamp"] = dt
     df["well_name"] = _normalize_well_name(well_name) or well_name
 
@@ -238,8 +267,9 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
 
 
 def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: List[str]) -> pd.DataFrame:
-    preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=80)
+    preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=120)
     header_row = _detect_header_row(preview, EVENT_COLUMN_ALIASES["stop_dt"])
+
     raw = pd.read_excel(xls, sheet_name=sheet, header=header_row)
     raw.columns = [str(c).strip() for c in raw.columns]
 
@@ -310,6 +340,7 @@ def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
     if not events_df.empty:
         events_df = events_df.sort_values(["well_name", "stop_dt"]).reset_index(drop=True)
 
+    # Guard against zero-column DataFrame create-table SQL errors
     if esp_df.empty and len(esp_df.columns) == 0:
         esp_df = pd.DataFrame(columns=[
             "timestamp", "well_name", "frequency_hz", "esm_active_current_amps", "total_esm_current_amps",
@@ -317,10 +348,15 @@ def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
             "current_ia", "current_ib", "current_ic", "sec_pressure_a", "sec_pressure_b", "sec_pressure_c",
             "header_pressure_bar", "fthp_kgcm2", "fat_c", "motor_load_pct", "choke_size_in", "remarks",
         ])
+
     if events_df.empty and len(events_df.columns) == 0:
         events_df = pd.DataFrame(columns=[
             "well_name", "stop_dt", "start_dt", "run_hours", "shutdown_hours", "reason_text", "failure_label", "duration_hrs"
         ])
+
+    # Final sanitize columns
+    esp_df.columns = [str(c).strip() if str(c).strip() else "unnamed_col" for c in esp_df.columns]
+    events_df.columns = [str(c).strip() if str(c).strip() else "unnamed_col" for c in events_df.columns]
 
     with sqlite3.connect(DB_PATH) as conn:
         esp_df.to_sql(TABLE_NAMES["esp_raw"], conn, if_exists="replace", index=False)
@@ -328,6 +364,7 @@ def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     print("\n=== STEP 2 INGESTION SUMMARY ===")
     print(f"File used: {file_path}")
+
     if not esp_df.empty:
         print("Rows per well (esp_raw_r9a):")
         print(esp_df.groupby("well_name").size().to_string())
@@ -344,7 +381,7 @@ def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
 
     if warnings:
         print("Parsing warnings:")
-        for w in warnings[: LOGGING.get("max_warning_samples", 20)]:
+        for w in warnings[: LOGGING.get("max_warning_samples", 50)]:
             print(f" - {w}")
 
     return esp_df, events_df

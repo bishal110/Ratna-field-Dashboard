@@ -36,7 +36,6 @@ R9A_FILE_CONFIG = {
 }
 
 # Optional runtime fallback for non-Windows/dev containers.
-# Step 2 can use this if R9A_FILE_CONFIG['folder'] does not exist.
 RAW_DATA_REPO_FALLBACK = str(PROJECT_ROOT / "data" / "raw")
 
 # -----------------------------------------------------------------------------
@@ -63,7 +62,8 @@ PUMP_CATALOG = {
 }
 
 # -----------------------------------------------------------------------------
-# Sheet matching patterns (case-insensitive contains checks)
+# Sheet matching patterns
+# IMPORTANT: keep patterns WELL-SPECIFIC (no generic "start_stop counter")
 # -----------------------------------------------------------------------------
 SHEET_MATCH_RULES = {
     "esp_parameter_sheets": {
@@ -73,10 +73,10 @@ SHEET_MATCH_RULES = {
         "R9A#5": ["r9a#5", "r9a5"],
     },
     "start_stop_sheets": {
-        "R9A#1": ["start_stop counter", "r9a#1", "r9a1"],
-        "R9A#2": ["start_stop counter", "r9a#2", "r9a2"],
-        "R9A#4": ["start_stop counter", "r9a#4", "r9a4"],
-        "R9A#5": ["start_stop counter", "r9a#5", "r9a5"],
+        "R9A#1": ["r9a#1", "r9a1"],
+        "R9A#2": ["r9a#2", "r9a2"],
+        "R9A#4": ["r9a#4", "r9a4"],
+        "R9A#5": ["r9a#5", "r9a5"],
     },
     "summary_sheet": ["summary r9a", "summary"],
 }
@@ -85,7 +85,7 @@ SHEET_MATCH_RULES = {
 # Header detection + parsing behavior
 # -----------------------------------------------------------------------------
 HEADER_DETECTION = {
-    "date_anchor_values": ["date", "Date", "DATE"],
+    "date_anchor_values": ["date", "Date", "DATE", "Data Recorded Date"],
     "date_anchor_column_index": 0,
 }
 
@@ -94,52 +94,53 @@ DATE_PARSE_SETTINGS = {
     "errors": "coerce",
 }
 
-TEXT_AS_NAN_TOKENS = ["sensor readings lost", "na", "n/a", "-", ""]
+TEXT_AS_NAN_TOKENS = ["sensor readings lost", "na", "n/a", "-", "", "None", "none"]
 
-# Choke conversion must use fractions.Fraction in Step 2.
 CHOKE_PARSE_SETTINGS = {
     "fraction_separator": "/",
     "allow_fraction_strings": True,
 }
 
 # -----------------------------------------------------------------------------
-# Column aliases (verify against actual workbook in Step 2 run output)
+# Column aliases
 # -----------------------------------------------------------------------------
 ESP_COLUMN_ALIASES = {
-    "date": ["Date", "DATE"],
-    "time": ["Time", "TIME"],
+    "date": ["Date", "DATE", "Data Recorded Date"],
+    "time": ["Time", "TIME", "Hr", "Time (Hrs)"],
     "frequency_hz": ["Frequency (Hz)", "Frequency", "Hz"],
     "esm_active_current_amps": [
         "ESM Active Current (Amps)",
         "ESM Active Current",
+        "ESM Active Curr.",
     ],
     "total_esm_current_amps": [
         "Total ESM Current (Amps)",
         "Total ESM Current",
+        "Total ESM Curr.",
     ],
     "pi_psia": ["Pi (Intake Pressure psia)", "Pi", "Intake Pressure"],
     "pd_psia": ["Pd (Discharge Pressure psia)", "Pd", "Discharge Pressure"],
     "ti_c": ["Ti (Intake Temp °C)", "Ti", "Intake Temp"],
     "tm_c": ["TM (Motor Temp °C)", "TM", "Motor Temp"],
-    "vibration_xyz": ["Vibration Vx/Vy/Vz (mm/s)", "Vibration", "Vx/Vy/Vz"],
-    "header_pressure_bar": ["Production Header Pressure (Bar)", "Header Pressure"],
+    "vibration_xyz": ["Vibration Vx/Vy/Vz (mm/s)", "Vibration", "Vx/Vy/Vz", "Vibration, Vx/Vy/Vz"],
+    "header_pressure_bar": ["Production Header Pressure (Bar)", "Header Pressure", "Prodn header P."],
     "fthp_kgcm2": ["FTHP (kg/cm²)", "FTHP"],
-    "fat_c": ["FAT (Flow Arm Temp °C)", "FAT"],
+    "fat_c": ["FAT (Flow Arm Temp °C)", "FAT", "Flow Arm Temp"],
     "abc_sec_pressure_kgcm2": [
         "A/B/C Sec Pressure (kg/cm²)",
         "A/B/C Sec Pressure",
     ],
-    "current_ia_ib_ic": ["Current IA/IB/IC (Amps)", "IA/IB/IC"],
-    "motor_load_pct": ["Motor Load (%)", "Motor Load"],
-    "choke_size_in": ["Choke Size (inches)", "Choke Size"],
-    "remarks": ["Remarks", "Remark", "Comments", "Reason/Comment"],
+    "current_ia_ib_ic": ["Current IA/IB/IC (Amps)", "IA/IB/IC", "Curr.. IA / IB / C"],
+    "motor_load_pct": ["Motor Load (%)", "Motor load", "Motor Load"],
+    "choke_size_in": ["Choke Size (inches)", "Choke size", "Choke Size"],
+    "remarks": ["Remarks", "Remark", "Comments", "Comment", "Reason/Comment"],
 }
 
 EVENT_COLUMN_ALIASES = {
-    "stop_dt": ["Stop date/time", "Stop Date/Time", "Stop Date Time"],
-    "start_dt": ["Start date/time", "Start Date/Time", "Start Date Time"],
-    "run_hours": ["Run hours", "Run Hrs", "Running Hours"],
-    "shutdown_hours": ["Shutdown hours", "Shutdown Hrs", "Shut down hours"],
+    "stop_dt": ["Stop date/time", "Stop Date/Time", "Stop Date Time", "Stop date", "Stop Date", "Stop"],
+    "start_dt": ["Start date/time", "Start Date/Time", "Start Date Time", "Start date", "Start Date", "Start"],
+    "run_hours": ["Run hours", "Run Hrs", "Running Hours", "Run duration"],
+    "shutdown_hours": ["Shutdown hours", "Shutdown Hrs", "Shut down hours", "Shutdown duration (Hrs)"],
     "reason_text": ["Reason/Comment", "Reason", "Comment", "Remarks"],
 }
 
@@ -218,7 +219,7 @@ THRESHOLDS = {
 }
 
 # -----------------------------------------------------------------------------
-# OCC config (Step 4)
+# OCC config
 # -----------------------------------------------------------------------------
 OCC_THRESHOLDS = {
     "frequency_delta_hz": 1.0,
@@ -240,7 +241,7 @@ OCC_INTERVENTION_KEYWORDS = ["intervention", "choke change", "redirect flow"]
 OCC_PIGGING_KEYWORDS = ["pigging", "pig run", "dewatering pig"]
 
 # -----------------------------------------------------------------------------
-# Modeling settings (Step 5)
+# Modeling settings
 # -----------------------------------------------------------------------------
 BASELINE_HEALTHY_DAYS = 60
 POST_OCC_REFIT_DAYS = 14
@@ -277,5 +278,5 @@ LOGGING = {
     "print_date_range": True,
     "print_parse_warnings": True,
     "print_raw_value_on_parse_error": True,
-    "max_warning_samples": 20,
+    "max_warning_samples": 50,
 }
