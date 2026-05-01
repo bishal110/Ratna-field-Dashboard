@@ -18,7 +18,6 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
-# Reduce noisy pandas warning for mixed datetime text parsing
 warnings.filterwarnings(
     "ignore",
     message="Could not infer format, so each element will be parsed individually",
@@ -48,7 +47,15 @@ from esp_prediction.config import (
 
 
 def _normalize_name(text: str) -> str:
-    return " ".join(str(text).strip().lower().replace("_", " ").replace("\n", " ").split())
+    return " ".join(
+        str(text)
+        .strip()
+        .lower()
+        .replace("_", " ")
+        .replace("\n", " ")
+        .replace(".", " ")
+        .split()
+    )
 
 
 def _normalize_well_name(raw: str) -> Optional[str]:
@@ -82,7 +89,7 @@ def find_r9a_file() -> Path:
 
 
 def _coerce_datetime(date_series: pd.Series, time_series: pd.Series | None = None) -> pd.Series:
-    """Robust datetime parser handling Excel serial dates + mixed text formats."""
+    """Handle Excel serial date and mixed string date-time."""
     dnum = pd.to_numeric(date_series, errors="coerce")
     excel_dt = pd.to_datetime(dnum, unit="D", origin="1899-12-30", errors="coerce")
 
@@ -93,25 +100,26 @@ def _coerce_datetime(date_series: pd.Series, time_series: pd.Series | None = Non
         ttext = "00:00:00"
 
     mixed = pd.to_datetime(dtext + " " + ttext, **DATE_PARSE_SETTINGS)
-    return excel_dt.fillna(mixed)
+    dt = excel_dt.fillna(mixed)
+
+    # Clean impossible ancient dates
+    dt = dt.where(dt >= pd.Timestamp("2000-01-01"))
+    return dt
 
 
 def _find_alias_column(columns: List[str], aliases: List[str]) -> Optional[str]:
     normalized_map = {_normalize_name(c): c for c in columns}
 
-    # exact normalized match
     for alias in aliases:
         key = _normalize_name(alias)
         if key in normalized_map:
             return normalized_map[key]
 
-    # contains match
     for alias in aliases:
         alias_key = _normalize_name(alias)
         for key, original in normalized_map.items():
             if alias_key in key:
                 return original
-
     return None
 
 
@@ -148,32 +156,62 @@ def _classify_failure(reason_text: str) -> int:
     return 0
 
 
-def _detect_header_row(preview_df: pd.DataFrame, anchor_terms: List[str]) -> int:
-    """Find header row by scanning for known anchor terms in a row."""
+def _detect_header_row_generic(preview_df: pd.DataFrame, anchor_terms: List[str]) -> int:
     anchors = {_normalize_name(a) for a in anchor_terms}
-    max_rows = min(len(preview_df), 120)
+    max_rows = min(len(preview_df), 150)
 
     for i in range(max_rows):
         row_vals = [_normalize_name(v) for v in preview_df.iloc[i].tolist()]
-        # exact token hit
         if any(a in row_vals for a in anchors):
             return i
-        # substring hit
         if any(any(a in cell for a in anchors) for cell in row_vals):
             return i
-
     return 0
 
 
+def _detect_esp_header_row(preview_df: pd.DataFrame) -> int:
+    """
+    ESP header row detection: avoid early metadata rows containing words like 'Date'.
+    Require multiple data-header tokens in the same row.
+    """
+    max_rows = min(len(preview_df), 150)
+    must_have_any_1 = ["date", "data recorded date"]
+    must_have_any_2 = ["frequency", "hz"]
+    must_have_any_3 = ["pi", "pd", "tm", "ti", "vibration"]
+
+    best_idx = 0
+    best_score = -1
+
+    for i in range(max_rows):
+        row_vals = [_normalize_name(v) for v in preview_df.iloc[i].tolist()]
+        row_text = " | ".join(row_vals)
+
+        score = 0
+        if any(tok in row_text for tok in must_have_any_1):
+            score += 2
+        if any(tok in row_text for tok in must_have_any_2):
+            score += 2
+        if any(tok in row_text for tok in must_have_any_3):
+            score += 2
+        if "choke" in row_text:
+            score += 1
+        if "motor load" in row_text:
+            score += 1
+        if "comment" in row_text or "remarks" in row_text:
+            score += 1
+
+        if score > best_score:
+            best_score = score
+            best_idx = i
+
+    return best_idx
+
+
 def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Optional[str]:
-    """
-    Resolve sheet robustly for each well.
-    Handles both R9A#1 and R9A1 style naming.
-    """
     patterns = [_normalize_name(p) for p in SHEET_MATCH_RULES[kind][well]]
 
-    well_norm = _normalize_name(well)          # e.g. r9a#1
-    well_token_hash = well_norm                # r9a#1
+    well_norm = _normalize_name(well)            # r9a#1
+    well_token_hash = well_norm
     well_token_nohash = well_norm.replace("#", "")  # r9a1
 
     def has_well_token(s_norm: str) -> bool:
@@ -184,15 +222,12 @@ def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Opt
         s_norm = _normalize_name(s)
 
         if kind == "esp_parameter_sheets":
-            # exclude summary/start-stop for ESP data tabs
             if "summary" in s_norm or "start stop" in s_norm or "start_stop" in s_norm:
                 continue
-            # require well token
             if not has_well_token(s_norm):
                 continue
 
         if kind == "start_stop_sheets":
-            # must be start-stop and must contain well token
             if ("start stop" not in s_norm and "start_stop" not in s_norm):
                 continue
             if not has_well_token(s_norm):
@@ -201,7 +236,7 @@ def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Opt
         if any(p in s_norm for p in patterns):
             return s
 
-    # fallback pass (still guarded)
+    # fallback pass
     for s in sheet_names:
         s_norm = _normalize_name(s)
 
@@ -219,8 +254,8 @@ def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Opt
 
 
 def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings_list: List[str]) -> pd.DataFrame:
-    preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=120)
-    header_row = _detect_header_row(preview, ESP_COLUMN_ALIASES["date"])
+    preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=150)
+    header_row = _detect_esp_header_row(preview)
 
     raw = pd.read_excel(xls, sheet_name=sheet, header=header_row)
     raw.columns = [str(c).strip() for c in raw.columns]
@@ -279,13 +314,14 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings_list
     rem_src = mapped.get("remarks")
     df["remarks"] = raw[rem_src].astype(str).fillna("") if rem_src else ""
 
+    # keep valid timestamps only
     df = df.dropna(subset=["timestamp"]).copy()
     return df
 
 
 def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings_list: List[str]) -> pd.DataFrame:
-    preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=120)
-    header_row = _detect_header_row(preview, EVENT_COLUMN_ALIASES["stop_dt"])
+    preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=150)
+    header_row = _detect_header_row_generic(preview, EVENT_COLUMN_ALIASES["stop_dt"])
 
     raw = pd.read_excel(xls, sheet_name=sheet, header=header_row)
     raw.columns = [str(c).strip() for c in raw.columns]
@@ -357,7 +393,6 @@ def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
     if not events_df.empty:
         events_df = events_df.sort_values(["well_name", "stop_dt"]).reset_index(drop=True)
 
-    # Guard against zero-column DataFrame create-table SQL errors
     if esp_df.empty and len(esp_df.columns) == 0:
         esp_df = pd.DataFrame(columns=[
             "timestamp", "well_name", "frequency_hz", "esm_active_current_amps", "total_esm_current_amps",
@@ -371,7 +406,6 @@ def run_ingestion() -> Tuple[pd.DataFrame, pd.DataFrame]:
             "well_name", "stop_dt", "start_dt", "run_hours", "shutdown_hours", "reason_text", "failure_label", "duration_hrs"
         ])
 
-    # Final sanitize columns
     esp_df.columns = [str(c).strip() if str(c).strip() else "unnamed_col" for c in esp_df.columns]
     events_df.columns = [str(c).strip() if str(c).strip() else "unnamed_col" for c in events_df.columns]
 
