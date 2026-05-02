@@ -6,7 +6,7 @@ from esp_prediction.config import BASELINE_HEALTHY_DAYS
 
 
 def _rolling_slope(series: pd.Series, window: int = 7) -> pd.Series:
-    vals = series.values
+    vals = pd.to_numeric(series, errors="coerce").values.astype(float)
     out = np.full(len(vals), np.nan)
     x = np.arange(window)
     for i in range(window - 1, len(vals)):
@@ -37,6 +37,9 @@ def build_daily_features(esp_df: pd.DataFrame, events_df: pd.DataFrame, prod_df:
         agg = agg.merge(p, on=["well_name", "date"], how="left")
     else:
         agg["flow_rate_bpd"] = np.nan
+
+    for col in ["vibration_vx", "vibration_vy", "vibration_vz", "current_ia", "current_ib", "current_ic"]:
+        agg[col] = pd.to_numeric(agg[col], errors="coerce")
 
     agg["delta_T"] = agg["tm_c"] - agg["ti_c"]
     agg["dp"] = agg["pd_psia"] - agg["pi_psia"]

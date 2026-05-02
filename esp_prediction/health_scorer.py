@@ -6,10 +6,11 @@ import pandas as pd
 
 def score_health(feature_df: pd.DataFrame, iso_model, rf_model, feature_cols: list[str]) -> pd.DataFrame:
     df = feature_df.copy()
-    X = df[feature_cols].replace([np.inf, -np.inf], np.nan).fillna(method="ffill").fillna(method="bfill").fillna(0)
+    X = df[feature_cols].replace([np.inf, -np.inf], np.nan).ffill().bfill().fillna(0)
 
     anomaly_raw = iso_model.decision_function(X)
-    failure_prob = rf_model.predict_proba(X)[:, 1]
+    proba = rf_model.predict_proba(X)
+    failure_prob = proba[:, 1] if proba.shape[1] > 1 else np.zeros(len(X))
 
     isolation_score = (anomaly_raw + 1) / 2 * 50
     rf_score = (1 - failure_prob) * 50

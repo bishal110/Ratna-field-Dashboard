@@ -15,6 +15,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 if __package__ is None or __package__ == "":
@@ -149,11 +150,15 @@ def _detect_header_row(preview_df: pd.DataFrame, anchor_terms: List[str]) -> int
 
 def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Optional[str]:
     patterns = SHEET_MATCH_RULES[kind][well]
+    best_sheet: Optional[str] = None
+    best_score = 0
     for s in sheet_names:
         s_norm = _normalize_name(s)
-        if any(_normalize_name(p) in s_norm for p in patterns):
-            return s
-    return None
+        score = sum(1 for p in patterns if _normalize_name(p) in s_norm)
+        if score > best_score:
+            best_score = score
+            best_sheet = s
+    return best_sheet
 
 
 def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: List[str]) -> pd.DataFrame:
@@ -168,9 +173,8 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
         if col:
             mapped[out_col] = col
 
-    missing_critical = [k for k in ["date", "time"] if k not in mapped]
-    if missing_critical:
-        warnings.append(f"[{well_name}] Missing critical columns in {sheet}: {missing_critical}")
+    if "date" not in mapped:
+        warnings.append(f"[{well_name}] Missing critical column 'date' in {sheet}")
         return pd.DataFrame()
 
     df = pd.DataFrame()
@@ -187,31 +191,31 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
     ]
     for c in numeric_cols:
         src = mapped.get(c)
-        df[c] = pd.to_numeric(raw[src], errors="coerce") if src else None
+        df[c] = pd.to_numeric(raw[src], errors="coerce") if src else np.nan
 
     vib_src = mapped.get("vibration_xyz")
     if vib_src:
         vib = raw[vib_src].apply(_split_triplet)
         df[["vibration_vx", "vibration_vy", "vibration_vz"]] = pd.DataFrame(vib.tolist(), index=df.index)
     else:
-        df[["vibration_vx", "vibration_vy", "vibration_vz"]] = None
+        df[["vibration_vx", "vibration_vy", "vibration_vz"]] = np.nan
 
     cur_src = mapped.get("current_ia_ib_ic")
     if cur_src:
         cur = raw[cur_src].apply(_split_triplet)
         df[["current_ia", "current_ib", "current_ic"]] = pd.DataFrame(cur.tolist(), index=df.index)
     else:
-        df[["current_ia", "current_ib", "current_ic"]] = None
+        df[["current_ia", "current_ib", "current_ic"]] = np.nan
 
     abc_src = mapped.get("abc_sec_pressure_kgcm2")
     if abc_src:
         abc = raw[abc_src].apply(_split_triplet)
         df[["sec_pressure_a", "sec_pressure_b", "sec_pressure_c"]] = pd.DataFrame(abc.tolist(), index=df.index)
     else:
-        df[["sec_pressure_a", "sec_pressure_b", "sec_pressure_c"]] = None
+        df[["sec_pressure_a", "sec_pressure_b", "sec_pressure_c"]] = np.nan
 
     choke_src = mapped.get("choke_size_in")
-    df["choke_size_in"] = raw[choke_src].apply(_parse_choke) if choke_src else None
+    df["choke_size_in"] = raw[choke_src].apply(_parse_choke) if choke_src else np.nan
 
     rem_src = mapped.get("remarks")
     df["remarks"] = raw[rem_src].astype(str).fillna("") if rem_src else ""

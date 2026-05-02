@@ -67,5 +67,8 @@ def apply_virtual_sensors(esp_df: pd.DataFrame) -> pd.DataFrame:
 
         return g
 
-    out = out.groupby("well_name", group_keys=False).apply(_process)
-    return out.reset_index(drop=True)
+    processed = []
+    for _, group in out.groupby("well_name"):
+        processed.append(_process(group))
+    out = pd.concat(processed, ignore_index=True) if processed else out
+    return out
