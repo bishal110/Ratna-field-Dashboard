@@ -73,10 +73,10 @@ SHEET_MATCH_RULES = {
         "R9A#5": ["r9a#5", "r9a5"],
     },
     "start_stop_sheets": {
-        "R9A#1": ["r9a#1", "r9a1"],
-        "R9A#2": ["r9a#2", "r9a2"],
-        "R9A#4": ["r9a#4", "r9a4"],
-        "R9A#5": ["r9a#5", "r9a5"],
+        "R9A#1": ["start_stop counter", "r9a#1", "r9a1"],
+        "R9A#2": ["start_stop counter", "r9a#2", "r9a2"],
+        "R9A#4": ["start_stop counter", "r9a#4", "r9a4"],
+        "R9A#5": ["start_stop counter", "r9a#5", "r9a5"],
     },
     "summary_sheet": ["summary r9a", "summary"],
 }
@@ -106,8 +106,8 @@ CHOKE_PARSE_SETTINGS = {
 # Column aliases (verify against actual workbook in Step 2 run output)
 # -----------------------------------------------------------------------------
 ESP_COLUMN_ALIASES = {
-    "date": ["Date", "DATE", "Data Recorded Date"],
-    "time": ["Time", "TIME", "Hr", "Time (Hrs)"],
+    "date": ["Date", "DATE"],
+    "time": ["Time", "TIME"],
     "frequency_hz": ["Frequency (Hz)", "Frequency", "Hz"],
     "esm_active_current_amps": [
         "ESM Active Current (Amps)",
@@ -121,7 +121,7 @@ ESP_COLUMN_ALIASES = {
     "pd_psia": ["Pd (Discharge Pressure psia)", "Pd", "Discharge Pressure"],
     "ti_c": ["Ti (Intake Temp °C)", "Ti", "Intake Temp"],
     "tm_c": ["TM (Motor Temp °C)", "TM", "Motor Temp"],
-    "vibration_xyz": ["Vibration Vx/Vy/Vz (mm/s)", "Vibration", "Vx/Vy/Vz", "Vibration, Vx/Vy/Vz"],
+    "vibration_xyz": ["Vibration Vx/Vy/Vz (mm/s)", "Vibration", "Vx/Vy/Vz"],
     "header_pressure_bar": ["Production Header Pressure (Bar)", "Header Pressure"],
     "fthp_kgcm2": ["FTHP (kg/cm²)", "FTHP"],
     "fat_c": ["FAT (Flow Arm Temp °C)", "FAT"],
@@ -129,15 +129,15 @@ ESP_COLUMN_ALIASES = {
         "A/B/C Sec Pressure (kg/cm²)",
         "A/B/C Sec Pressure",
     ],
-    "current_ia_ib_ic": ["Current IA/IB/IC (Amps)", "IA/IB/IC", "Curr.. IA / IB / C"],
+    "current_ia_ib_ic": ["Current IA/IB/IC (Amps)", "IA/IB/IC"],
     "motor_load_pct": ["Motor Load (%)", "Motor Load"],
     "choke_size_in": ["Choke Size (inches)", "Choke Size"],
     "remarks": ["Remarks", "Remark", "Comments", "Reason/Comment"],
 }
 
 EVENT_COLUMN_ALIASES = {
-    "stop_dt": ["Stop date/time", "Stop Date/Time", "Stop Date Time", "Stop date", "Stop Date", "Stop"],
-    "start_dt": ["Start date/time", "Start Date/Time", "Start Date Time", "Start date", "Start Date", "Start"],
+    "stop_dt": ["Stop date/time", "Stop Date/Time", "Stop Date Time"],
+    "start_dt": ["Start date/time", "Start Date/Time", "Start Date Time"],
     "run_hours": ["Run hours", "Run Hrs", "Running Hours"],
     "shutdown_hours": ["Shutdown hours", "Shutdown Hrs", "Shut down hours"],
     "reason_text": ["Reason/Comment", "Reason", "Comment", "Remarks"],
