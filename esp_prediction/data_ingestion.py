@@ -5,6 +5,8 @@ Outputs:
 - esp_events_r9a
 """
 
+# updated new and pushed again
+
 from __future__ import annotations
 
 import sqlite3
@@ -79,17 +81,8 @@ def _coerce_datetime(date_series: pd.Series, time_series: pd.Series | None = Non
     excel_dt = pd.to_datetime(dnum, unit="D", origin="1899-12-30", errors="coerce")
     dtext = date_series.astype(str).str.strip()
     ttext = time_series.astype(str).str.strip() if time_series is not None else "00:00:00"
-    combined = dtext + " " + ttext
-    iso_mixed = pd.to_datetime(combined, errors="coerce")
-    non_iso_mask = iso_mixed.isna()
-    if non_iso_mask.any():
-        iso_mixed.loc[non_iso_mask] = pd.to_datetime(
-            combined.loc[non_iso_mask],
-            dayfirst=DATE_PARSE_SETTINGS.get("dayfirst", True),
-            errors=DATE_PARSE_SETTINGS.get("errors", "coerce"),
-        )
-    out = excel_dt.fillna(iso_mixed)
-    return out.where(out >= pd.Timestamp("2000-01-01"))
+    mixed = pd.to_datetime(dtext + " " + ttext, **DATE_PARSE_SETTINGS)
+    return excel_dt.fillna(mixed)
 
 
 def _find_alias_column(columns: List[str], aliases: List[str]) -> Optional[str]:
@@ -154,87 +147,18 @@ def _detect_header_row(preview_df: pd.DataFrame, anchor_terms: List[str]) -> int
     return 0
 
 
-
-
-def _detect_esp_header_row(preview_df: pd.DataFrame) -> int:
-    max_rows = min(len(preview_df), 150)
-    must_have_any_1 = ["date", "data recorded date"]
-    must_have_any_2 = ["frequency", "hz"]
-    must_have_any_3 = ["pi", "pd", "tm", "ti", "vibration"]
-
-    best_idx = 0
-    best_score = -1
-
-    for i in range(max_rows):
-        row_vals = [_normalize_name(v) for v in preview_df.iloc[i].tolist()]
-        row_text = " | ".join(row_vals)
-
-        score = 0
-        if any(tok in row_text for tok in must_have_any_1):
-            score += 2
-        if any(tok in row_text for tok in must_have_any_2):
-            score += 2
-        if any(tok in row_text for tok in must_have_any_3):
-            score += 2
-        if "choke" in row_text:
-            score += 1
-        if "motor load" in row_text:
-            score += 1
-        if "comment" in row_text or "remarks" in row_text:
-            score += 1
-
-        if score > best_score:
-            best_score = score
-            best_idx = i
-
-    return best_idx
-
 def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Optional[str]:
-    patterns = [_normalize_name(p) for p in SHEET_MATCH_RULES[kind][well]]
-
-    well_norm = _normalize_name(well)
-    well_token_hash = well_norm
-    well_token_nohash = well_norm.replace("#", "")
-
-    def has_well_token(s_norm: str) -> bool:
-        return (well_token_hash in s_norm) or (well_token_nohash in s_norm)
-
+    patterns = SHEET_MATCH_RULES[kind][well]
     for s in sheet_names:
         s_norm = _normalize_name(s)
-
-        if kind == "esp_parameter_sheets":
-            if "summary" in s_norm or "start stop" in s_norm or "start_stop" in s_norm:
-                continue
-            if not has_well_token(s_norm):
-                continue
-
-        if kind == "start_stop_sheets":
-            if ("start stop" not in s_norm and "start_stop" not in s_norm):
-                continue
-            if not has_well_token(s_norm):
-                continue
-
-        if any(p in s_norm for p in patterns):
+        if any(_normalize_name(p) in s_norm for p in patterns):
             return s
-
-    for s in sheet_names:
-        s_norm = _normalize_name(s)
-
-        if kind == "esp_parameter_sheets":
-            if "summary" in s_norm or "start stop" in s_norm or "start_stop" in s_norm:
-                continue
-            if has_well_token(s_norm):
-                return s
-
-        if kind == "start_stop_sheets":
-            if ("start stop" in s_norm or "start_stop" in s_norm) and has_well_token(s_norm):
-                return s
     return None
 
 
 def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: List[str]) -> pd.DataFrame:
     preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=80)
-    header_row = _detect_esp_header_row(preview)
+    header_row = _detect_header_row(preview, ESP_COLUMN_ALIASES["date"])
     raw = pd.read_excel(xls, sheet_name=sheet, header=header_row)
     raw.columns = [str(c).strip() for c in raw.columns]
 
@@ -244,12 +168,14 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
         if col:
             mapped[out_col] = col
 
-    missing_critical = [k for k in ["date"] if k not in mapped]
+    missing_critical = [k for k in ["date", "time"] if k not in mapped]
     if missing_critical:
         warnings.append(f"[{well_name}] Missing critical columns in {sheet}: {missing_critical}")
         return pd.DataFrame()
 
     df = pd.DataFrame()
+    date_str = raw[mapped["date"]].astype(str).str.strip()
+    time_str = raw[mapped["time"]].astype(str).str.strip() if "time" in mapped else "00:00:00"
     dt = _coerce_datetime(raw[mapped["date"]], raw[mapped["time"]] if "time" in mapped else None)
     df["timestamp"] = dt
     df["well_name"] = _normalize_well_name(well_name) or well_name
@@ -307,12 +233,8 @@ def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: L
             mapped[out_col] = col
 
     if "stop_dt" not in mapped:
-        fallback_stop = _find_alias_column(list(raw.columns), ["Stop date", "Stop Date", "Stop"])
-        if fallback_stop:
-            mapped["stop_dt"] = fallback_stop
-        else:
-            warnings.append(f"[{well_name}] Missing stop datetime column in {sheet}")
-            return pd.DataFrame()
+        warnings.append(f"[{well_name}] Missing stop datetime column in {sheet}")
+        return pd.DataFrame()
 
     ev = pd.DataFrame()
     ev["well_name"] = _normalize_well_name(well_name) or well_name
