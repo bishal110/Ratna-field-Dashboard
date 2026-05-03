@@ -13,9 +13,16 @@ def detect_occ(daily_df: pd.DataFrame, events_df: pd.DataFrame) -> pd.DataFrame:
     df["occ_type"] = None
     df["occ_description"] = None
 
-    events_dates = set(pd.to_datetime(events_df.get("start_dt", pd.Series(dtype="datetime64[ns]")).dropna()).dt.date.tolist()) if not events_df.empty else set()
+    # Build per-well restart date sets to avoid cross-well OCC contamination
+    events_dates_by_well: dict = {}
+    if not events_df.empty and "well_name" in events_df.columns and "start_dt" in events_df.columns:
+        for w, g in events_df.groupby("well_name"):
+            events_dates_by_well[w] = set(
+                pd.to_datetime(g["start_dt"].dropna()).dt.date.tolist()
+            )
 
     for well, g in df.groupby("well_name"):
+        well_events_dates = events_dates_by_well.get(well, set())
         active_until = None
         active_type = None
         idxs = g.index.tolist()
@@ -34,7 +41,7 @@ def detect_occ(daily_df: pd.DataFrame, events_df: pd.DataFrame) -> pd.DataFrame:
                 occ_type = "OCC_FLOWRATE"; desc = "Flowrate changed >15%"
             elif pd.notna(row.get("header_pressure_bar")) and pd.notna(prev.get("header_pressure_bar")) and abs(row.get("header_pressure_bar")-prev.get("header_pressure_bar")) > OCC_THRESHOLDS["backpressure_delta_bar"]:
                 occ_type = "OCC_BACKPRESSURE"; desc = "Backpressure changed >3 bar"
-            elif row["date"].date() in events_dates:
+            elif row["date"].date() in well_events_dates:
                 occ_type = "OCC_RESTART"; desc = "Restart event detected"
             elif any(k in str(row.get("remarks", "")).lower() for k in OCC_INTERVENTION_KEYWORDS):
                 occ_type = "OCC_INTERVENTION"; desc = "Intervention remark detected"

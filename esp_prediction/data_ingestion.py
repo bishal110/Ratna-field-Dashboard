@@ -9,8 +9,11 @@ Outputs:
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import sys
+from datetime import datetime as _dt_cls
+from datetime import time as _dt_time
 from fractions import Fraction
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -76,14 +79,69 @@ def find_r9a_file() -> Path:
 
 
 
+def _parse_time_component(tval) -> Optional[tuple]:
+    """Return (hour, minute) from various time value formats, or None."""
+    try:
+        if pd.isna(tval):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(tval, _dt_time):
+        return (tval.hour, tval.minute)
+    txt = re.sub(r"\s*[Hh][Rr][Ss]\.?\s*$", "", str(tval).strip()).strip()
+    if not txt:
+        return None
+    # Pure digits: "1158" -> (11, 58), "855" -> (8, 55), "14" -> (14, 0)
+    m = re.match(r"^(\d+)$", txt)
+    if m:
+        n = int(m.group(1))
+        if n < 24:
+            return (n, 0)
+        if n < 2400:
+            return (n // 100, n % 100)
+    # HH:MM with optional spaces around colon
+    m = re.match(r"^(\d{1,2})\s*:\s*(\d{2})", txt)
+    if m:
+        return (int(m.group(1)), int(m.group(2)))
+    return None
+
+
+def _parse_date_component(dval) -> Optional[pd.Timestamp]:
+    """Return normalized date Timestamp, handling datetime objects, Excel serials, and text."""
+    try:
+        if pd.isna(dval):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(dval, pd.Timestamp):
+        return dval.normalize()
+    if isinstance(dval, _dt_cls):
+        return pd.Timestamp(dval).normalize()
+    n = pd.to_numeric(dval, errors="coerce")
+    if pd.notna(n):
+        return (pd.Timestamp("1899-12-30") + pd.Timedelta(days=float(n))).normalize()
+    txt = str(dval).strip()
+    try:
+        return pd.to_datetime(txt, dayfirst=True, errors="raise").normalize()
+    except Exception:
+        return None
+
+
 def _coerce_datetime(date_series: pd.Series, time_series: pd.Series | None = None) -> pd.Series:
-    """Robust datetime parser handling Excel serial dates + mixed text formats."""
-    dnum = pd.to_numeric(date_series, errors="coerce")
-    excel_dt = pd.to_datetime(dnum, unit="D", origin="1899-12-30", errors="coerce")
-    dtext = date_series.astype(str).str.strip()
-    ttext = time_series.astype(str).str.strip() if time_series is not None else "00:00:00"
-    mixed = pd.to_datetime(dtext + " " + ttext, **DATE_PARSE_SETTINGS)
-    return excel_dt.fillna(mixed)
+    """Robust datetime parser: handles Excel serial dates, datetime objects, and mixed text formats
+    including time strings like '1158 hrs', '10:25 Hrs', datetime.time objects, etc."""
+    results = []
+    for i in range(len(date_series)):
+        dt = _parse_date_component(date_series.iloc[i])
+        if dt is None:
+            results.append(pd.NaT)
+            continue
+        if time_series is not None:
+            hm = _parse_time_component(time_series.iloc[i])
+            if hm is not None:
+                dt = dt.replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+        results.append(dt)
+    return pd.Series(results, dtype="datetime64[ns]")
 
 
 def _find_alias_column(columns: List[str], aliases: List[str]) -> Optional[str]:
@@ -135,26 +193,37 @@ def _classify_failure(reason_text: str) -> int:
     return 0
 
 
-def _detect_header_row(preview_df: pd.DataFrame, anchor_terms: List[str]) -> int:
-    """Find header row by scanning for known anchor terms in a row."""
-    anchors = {_normalize_name(a) for a in anchor_terms}
+def _detect_header_row(preview_df: pd.DataFrame, anchor_terms: List[str], all_alias_terms: List[str] | None = None) -> int:
+    """Return the row with the most alias matches — avoids false matches in config rows."""
+    scorers = {_normalize_name(a) for a in (all_alias_terms if all_alias_terms else anchor_terms)
+               if len(_normalize_name(a)) > 2}
     max_rows = min(len(preview_df), 120)
+    best_row, best_score = 0, -1
     for i in range(max_rows):
         row_vals = [_normalize_name(v) for v in preview_df.iloc[i].tolist()]
-        if any(a in row_vals for a in anchors):
-            return i
-        if any(any(a in cell for a in anchors) for cell in row_vals):
-            return i
-    return 0
+        score = sum(
+            1 for term in scorers
+            if any(term == cell or (len(term) > 3 and term in cell) for cell in row_vals)
+        )
+        if score > best_score:
+            best_score = score
+            best_row = i
+    return best_row
 
 
 def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Optional[str]:
     patterns = SHEET_MATCH_RULES[kind][well]
     best_sheet: Optional[str] = None
-    best_score = 0
+    best_score = -1.0
     for s in sheet_names:
         s_norm = _normalize_name(s)
-        score = sum(1 for p in patterns if _normalize_name(p) in s_norm)
+        matched = [_normalize_name(p) for p in patterns if _normalize_name(p) in s_norm]
+        if not matched:
+            continue
+        count = len(matched)
+        # Specificity: fraction of sheet name covered by matched patterns — favours shorter, more specific sheets
+        specificity = sum(len(m) for m in matched) / max(len(s_norm), 1)
+        score = count * 10.0 + specificity
         if score > best_score:
             best_score = score
             best_sheet = s
@@ -163,7 +232,8 @@ def _resolve_sheet_for_well(sheet_names: List[str], well: str, kind: str) -> Opt
 
 def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: List[str]) -> pd.DataFrame:
     preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=80)
-    header_row = _detect_header_row(preview, ESP_COLUMN_ALIASES["date"])
+    _esp_all = [a for aliases in ESP_COLUMN_ALIASES.values() for a in aliases]
+    header_row = _detect_header_row(preview, ESP_COLUMN_ALIASES["date"], _esp_all)
     raw = pd.read_excel(xls, sheet_name=sheet, header=header_row)
     raw.columns = [str(c).strip() for c in raw.columns]
 
@@ -178,9 +248,10 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
         return pd.DataFrame()
 
     df = pd.DataFrame()
-    date_str = raw[mapped["date"]].astype(str).str.strip()
-    time_str = raw[mapped["time"]].astype(str).str.strip() if "time" in mapped else "00:00:00"
-    dt = _coerce_datetime(raw[mapped["date"]], raw[mapped["time"]] if "time" in mapped else None)
+    # Forward-fill date: some sheets only put the date on the first reading of the day
+    date_raw = raw[mapped["date"]].ffill()
+    time_raw = raw[mapped["time"]] if "time" in mapped else None
+    dt = _coerce_datetime(date_raw, time_raw)
     df["timestamp"] = dt
     df["well_name"] = _normalize_well_name(well_name) or well_name
 
@@ -226,7 +297,8 @@ def _load_esp_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: Lis
 
 def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: List[str]) -> pd.DataFrame:
     preview = pd.read_excel(xls, sheet_name=sheet, header=None, nrows=80)
-    header_row = _detect_header_row(preview, EVENT_COLUMN_ALIASES["stop_dt"])
+    _ev_all = [a for aliases in EVENT_COLUMN_ALIASES.values() for a in aliases]
+    header_row = _detect_header_row(preview, EVENT_COLUMN_ALIASES["stop_dt"], _ev_all)
     raw = pd.read_excel(xls, sheet_name=sheet, header=header_row)
     raw.columns = [str(c).strip() for c in raw.columns]
 
@@ -241,8 +313,11 @@ def _load_event_sheet(xls: pd.ExcelFile, sheet: str, well_name: str, warnings: L
         return pd.DataFrame()
 
     ev = pd.DataFrame()
+    # Some sheets split date and time into separate columns; combine them if a stop_time col exists
+    stop_time_col = raw[mapped["stop_time"]] if "stop_time" in mapped else None
+    ev["stop_dt"] = _coerce_datetime(raw[mapped["stop_dt"]], stop_time_col)
+    # Assign well_name AFTER stop_dt so the index exists and scalar broadcasts correctly
     ev["well_name"] = _normalize_well_name(well_name) or well_name
-    ev["stop_dt"] = _coerce_datetime(raw[mapped["stop_dt"]], None)
     ev["start_dt"] = _coerce_datetime(raw[mapped.get("start_dt")], None) if "start_dt" in mapped else pd.NaT
     ev["run_hours"] = pd.to_numeric(raw[mapped.get("run_hours")], errors="coerce") if "run_hours" in mapped else None
     ev["shutdown_hours"] = pd.to_numeric(raw[mapped.get("shutdown_hours")], errors="coerce") if "shutdown_hours" in mapped else None

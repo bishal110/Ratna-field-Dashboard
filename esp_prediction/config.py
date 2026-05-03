@@ -106,16 +106,18 @@ CHOKE_PARSE_SETTINGS = {
 # Column aliases (verify against actual workbook in Step 2 run output)
 # -----------------------------------------------------------------------------
 ESP_COLUMN_ALIASES = {
-    "date": ["Date", "DATE"],
+    "date": ["Date", "DATE", "Data Recorded Date", "Recorded Date"],
     "time": ["Time", "TIME"],
     "frequency_hz": ["Frequency (Hz)", "Frequency", "Hz"],
     "esm_active_current_amps": [
         "ESM Active Current (Amps)",
         "ESM Active Current",
+        "ESM Active Curr.",
     ],
     "total_esm_current_amps": [
         "Total ESM Current (Amps)",
         "Total ESM Current",
+        "Total ESM Curr.",
     ],
     "pi_psia": ["Pi (Intake Pressure psia)", "Pi", "Intake Pressure"],
     "pd_psia": ["Pd (Discharge Pressure psia)", "Pd", "Discharge Pressure"],
@@ -136,10 +138,11 @@ ESP_COLUMN_ALIASES = {
 }
 
 EVENT_COLUMN_ALIASES = {
-    "stop_dt": ["Stop date/time", "Stop Date/Time", "Stop Date Time"],
-    "start_dt": ["Start date/time", "Start Date/Time", "Start Date Time"],
-    "run_hours": ["Run hours", "Run Hrs", "Running Hours"],
-    "shutdown_hours": ["Shutdown hours", "Shutdown Hrs", "Shut down hours"],
+    "stop_dt": ["Stop date/time", "Stop Date/Time", "Stop Date Time", "Stop date", "Stop Date"],
+    "stop_time": ["time (Hrs)", "Time (Hrs)", "time hrs", "time hr"],
+    "start_dt": ["Start date/time", "Start Date/Time", "Start Date Time", "Start date", "Start Date"],
+    "run_hours": ["Run hours", "Run Hrs", "Running Hours", "Run duration"],
+    "shutdown_hours": ["Shutdown hours", "Shutdown Hrs", "Shut down hours", "Shutdown duration (Hrs)", "Shutdown duration"],
     "reason_text": ["Reason/Comment", "Reason", "Comment", "Remarks"],
 }
 
